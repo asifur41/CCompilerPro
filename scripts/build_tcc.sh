@@ -33,12 +33,22 @@ COMMON=(-O2 -w -DONE_SOURCE=1 '-DCONFIG_TCCDIR="/data/local/tmp/tcc"')
 
 # 1) the Android arm64 executable
 "$CC" "${COMMON[@]}" -DTCC_TARGET_ARM64 -Wl,-z,max-page-size=16384 tcc.c -o tcc_android -lm -ldl
-"$BIN/llvm-strip" tcc_android || true
+# (not stripped on purpose: symbols stay visible so the binary can be inspected)
 file tcc_android 2>/dev/null || true
 
 # 2) host x86-64 build, only used to smoke-test our headers against the sample programs
 gcc "${COMMON[@]}" -DTCC_TARGET_X86_64 tcc.c -o tcc_host -lm -ldl
 
+mkdir -p "$ROOT/build-info"
+{
+  echo "upstream:   $(git config --get remote.origin.url)"
+  echo "commit:     $(git rev-parse HEAD)"
+  echo "describe:   $(git describe --tags --always 2>/dev/null || true)"
+  echo "ndk:        $(grep Pkg.Revision "$NDK/source.properties" 2>/dev/null || echo unknown)"
+  echo "compiler:   $("$CC" --version 2>/dev/null | head -1)"
+  echo "flags:      ${COMMON[*]} -DTCC_TARGET_ARM64"
+} > "$ROOT/build-info/tinycc.txt"
+cat "$ROOT/build-info/tinycc.txt"
 mkdir -p "$ROOT/app/src/main/jniLibs/arm64-v8a"
 cp tcc_android "$ROOT/app/src/main/jniLibs/arm64-v8a/libtccexe.so"
 

@@ -24,16 +24,47 @@ jobs:
     - name: Build C compiler (TinyCC for Android arm64, via NDK)
       run: bash scripts/build_tcc.sh
 
+    - name: Restore release signing key from secrets
+      env:
+        KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      run: |
+        if [ -z "$KEYSTORE_BASE64" ]; then
+          echo "::error::Secret KEYSTORE_BASE64 is missing. Create the signing key first (see instructions)."
+          exit 1
+        fi
+        echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+
     - name: Set up Gradle 8.5
       uses: gradle/actions/setup-gradle@v4
       with:
         gradle-version: '8.5'
 
-    - name: Build APK
-      run: gradle assembleDebug --no-daemon
+    - name: Build signed release APK
+      env:
+        KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      run: gradle assembleRelease --no-daemon
 
-    - name: Upload APK
+    - name: Trust report and guards (fails on any permission, tracker SDK or debuggable flag)
+      run: |
+        APK=app/build/outputs/apk/release/app-release.apk
+        ls -l "$APK"
+        mkdir -p trust-out
+        cp "$APK" trust-out/CCompilerPro.apk
+        bash scripts/trust_report.sh trust-out/CCompilerPro.apk trust-out
+        (cd trust-out && sha256sum CCompilerPro.apk > CCompilerPro.apk.sha256 && cat CCompilerPro.apk.sha256)
+
+    - name: Show signing certificate fingerprint
+      run: |
+        SDK="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+        AS="$(ls -d "$SDK"/build-tools/*/apksigner | sort -V | tail -1)"
+        "$AS" verify --print-certs trust-out/CCompilerPro.apk | tee trust-out/SIGNING_CERT.txt
+
+    - name: Upload APK + trust report
+      if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: ccompiler-pro-debug-apk
-        path: app/build/outputs/apk/debug/app-debug.apk
+        name: ccompiler-pro-release
+        path: trust-out/

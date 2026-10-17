@@ -11,3 +11,8 @@ app/build/
 *.apk
 *.aab
 keystore.jks
+*.jks
+*.keystore
+trust-out/
+build-info/
+password.txt
