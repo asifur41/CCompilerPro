@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="font_names">
+        <item>Roboto Mono</item>
+        <item>Fira Code</item>
+        <item>JetBrains Mono</item>
+        <item>Courier Prime</item>
+    </string-array>
+    <!-- Resource names of the font files expected in res/font (see scripts/fetch_fonts.sh) -->
+    <string-array name="font_resources">
+        <item>roboto_mono</item>
+        <item>fira_code</item>
+        <item>jetbrains_mono</item>
+        <item>courier_prime</item>
+    </string-array>
+</resources>

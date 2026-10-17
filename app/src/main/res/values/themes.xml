@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.CCompiler" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#6200DD</item>
+        <item name="colorSecondary">#BB86FC</item>
+    </style>
+</resources>

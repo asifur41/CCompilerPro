@@ -1,0 +1,36 @@
+name: Build CCompiler Pro APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v5
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v5
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Fetch bundled fonts (bundled into the APK, no runtime download)
+      run: bash scripts/fetch_fonts.sh
+
+    - name: Set up Gradle 8.5
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: '8.5'
+
+    - name: Build APK
+      run: gradle assembleDebug --no-daemon
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: ccompiler-pro-debug-apk
+        path: app/build/outputs/apk/debug/app-debug.apk

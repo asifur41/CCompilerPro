@@ -1,0 +1,2 @@
+-keep class com.ccompiler.pro.** { *; }
+-dontwarn javax.annotation.**
