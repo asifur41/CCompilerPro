@@ -20,6 +20,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.WindowInsetsControllerCompat
 import com.ccompiler.pro.compiler.CodeSanitizer
+import com.ccompiler.pro.compiler.CompilationResult
+import com.ccompiler.pro.compiler.ExecResult
 import com.ccompiler.pro.compiler.CompilerEngine
 import com.ccompiler.pro.compiler.ExecutorEngine
 import com.ccompiler.pro.files.FileBrowser
@@ -40,9 +42,18 @@ import com.ccompiler.pro.utils.NotificationHelper
 import com.ccompiler.pro.utils.Prefs
 import com.ccompiler.pro.utils.ShareHelper
 import com.ccompiler.pro.utils.WarningDialog
+import com.ccompiler.pro.utils.dp
 import com.ccompiler.pro.utils.hideKeyboard
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import android.view.View
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -55,11 +66,16 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnMenu: ImageButton
     private lateinit var tvTitle: TextView
     private lateinit var btnRun: MaterialButton
+    private lateinit var btnStop: MaterialButton
     private lateinit var host: FrameLayout
     private lateinit var editor: EditorView
     private lateinit var output: OutputView
     private lateinit var compiler: CompilerEngine
     private val executor = ExecutorEngine()
+    private val uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var runJob: Job? = null
+    /** Incremented by every Run/Stop. Anything belonging to an older generation is ignored. */
+    @Volatile private var runGeneration = 0
 
     private var pane: PaneLayout? = null
     private var paneMode = -1
@@ -103,6 +119,17 @@ class MainActivity : AppCompatActivity() {
 
         btnMenu.setOnClickListener { showMenu(it) }
         btnRun.setOnClickListener { runProgram() }
+        btnStop = MaterialButton(this).apply {
+            text = "Stop"
+            visibility = View.GONE
+            setIconResource(R.drawable.ic_stop)
+            setOnClickListener { stopProgram() }
+        }
+        topBar.addView(btnStop, topBar.indexOfChild(btnRun),
+            LinearLayout.LayoutParams(-2, dp(40)).apply { marginEnd = dp(8) })
+        output.onSend = { executor.sendInput(it) }
+        output.onEof = { executor.closeInput() }
+        output.onLineClick = { jumpToLine(it) }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() = onBack()
         })
@@ -127,6 +154,12 @@ class MainActivity : AppCompatActivity() {
         super.onPause()
         handler.removeCallbacks(autosaveTask)
         if (Prefs.bool(this, Prefs.AUTOSAVE, true)) doAutoSave(showIndicator = false)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        uiScope.cancel()
+        executor.shutdown()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -180,6 +213,9 @@ class MainActivity : AppCompatActivity() {
         val fg = if (ColorUtils.calculateLuminance(p.accent) > 0.5) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
         btnRun.setTextColor(fg)
         btnRun.iconTint = ColorStateList.valueOf(fg)
+        btnStop.backgroundTintList = ColorStateList.valueOf(0xFFD32F2F.toInt())
+        btnStop.setTextColor(0xFFFFFFFF.toInt())
+        btnStop.iconTint = ColorStateList.valueOf(0xFFFFFFFF.toInt())
 
         editor.applySettings()
         editor.applyTheme(p)
@@ -224,8 +260,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateRunButton() {
-        btnRun.text = if (running) "Stop" else "Run"
-        btnRun.setIconResource(if (running) R.drawable.ic_stop else R.drawable.ic_play)
+        // While a run is active the main button becomes "Restart" (terminates the old process, starts anew)
+        // and a separate Stop button appears.
+        btnRun.text = if (running) "Restart" else "Run"
+        btnRun.setIconResource(R.drawable.ic_play)
+        btnStop.visibility = if (running) View.VISIBLE else View.GONE
     }
 
     private fun onEditorChanged() {
@@ -451,73 +490,140 @@ class MainActivity : AppCompatActivity() {
 
     // ------------------------------------------------------------------ compile & run
 
-    private fun runProgram() {
-        if (running) {
-            compiler.cancel()
-            executor.cancel()
-            return
+    private fun finishRun(gen: Int) {
+        if (gen != runGeneration) return
+        running = false
+        updateRunButton()
+    }
+
+    /** Tap on a compiler error: leave the output pane (Flip mode) and show the line in the editor. */
+    private fun jumpToLine(line: Int) {
+        pane?.handleBack()
+        editor.goToLine(line)
+    }
+
+    private fun stopProgram() {
+        compiler.cancel()
+        if (executor.isRunning()) {
+            executor.stop()                      // onFinished(cancelled) is delivered and ends the run
+        } else {
+            runGeneration++                      // we were still compiling
+            runJob?.cancel()
+            output.append("\n[Stopped]\n", OutputView.Kind.ERR)
+            output.setInputVisible(false)
+            running = false
+            updateRunButton()
         }
+    }
+
+    private fun listenerFor(gen: Int) = object : ExecutorEngine.Listener {
+        override fun onOutput(text: String, isErr: Boolean) {
+            if (gen == runGeneration) output.append(text, if (isErr) OutputView.Kind.ERR else OutputView.Kind.OUT)
+        }
+
+        override fun onInputEcho(text: String) {
+            if (gen == runGeneration) output.append(text + "\n", OutputView.Kind.INFO)
+        }
+
+        override fun onWaitingForInput(waiting: Boolean) {
+            if (gen == runGeneration) output.setInputVisible(waiting)
+        }
+
+        override fun onFinished(result: ExecResult) {
+            if (gen != runGeneration) return
+            val secs = String.format(Locale.US, "%.2f", result.durationMs / 1000.0)
+            val msg = when {
+                result.cancelled -> "\n[Stopped]\n"
+                result.outputLimit -> "\n[Killed: too much output]\n"
+                result.timedOut -> "\n[Killed: exceeded the ${ExecutorEngine.TIMEOUT_SEC}s run-time limit]\n"
+                result.memoryKilled -> "\n[Killed: exceeded ${ExecutorEngine.MEMORY_LIMIT_KB / 1024} MB memory limit]\n"
+                else -> "\n[Process exited with code ${result.exitCode} in ${secs}s]\n"
+            }
+            val bad = result.cancelled || result.outputLimit || result.timedOut || result.memoryKilled || result.exitCode != 0
+            output.append(msg, if (bad) OutputView.Kind.ERR else OutputView.Kind.OK)
+            output.setInputVisible(false)
+            finishRun(gen)
+        }
+    }
+
+    /**
+     * Compile (type-check) and run. Pressing Run while an earlier run is still active restarts:
+     * the old compile/process is terminated first (SIGTERM, then SIGKILL) on a background coroutine,
+     * and nothing from the old run can touch the screen afterwards (generation check).
+     */
+    private fun runProgram() {
+        val gen = ++runGeneration
+        compiler.cancel()
+        runJob?.cancel()
+
         editor.ensureNotEmpty()
         if (Prefs.bool(this, Prefs.AUTO_FORMAT, false)) editor.format()
         editor.hideKeyboard()
         val code = editor.getText()
-        output.clear()
-        pane?.onRunStarted()
-
-        val violations = CodeSanitizer.check(code)
-        if (violations.isNotEmpty()) {
-            output.append("Blocked by security check:\n", OutputView.Kind.ERR)
-            violations.forEach { output.append("  line ${it.line}: ${it.message}\n", OutputView.Kind.ERR) }
-            return
-        }
-        if (!compiler.isAvailable()) {
-            output.append(compiler.missingMessage(), OutputView.Kind.ERR)
-            return
-        }
-
         val name = currentFile?.name ?: untitledName
-        val stdin = output.stdin()
+        editor.clearErrorLines()
+        output.clear()
+        output.setInputVisible(false)
+        pane?.onRunStarted()
         running = true
         updateRunButton()
 
-        Thread {
-            val dir = StorageHelper.workDir(this)
+        runJob = uiScope.launch {
+            // 1) make sure the previous process is really gone (off the UI thread)
+            withContext(Dispatchers.IO) { executor.stopSilently() }
+            if (gen != runGeneration) return@launch
+
+            // 2) safety checks
+            val violations = CodeSanitizer.check(code)
+            if (violations.isNotEmpty()) {
+                output.append("Blocked by security check:\n", OutputView.Kind.ERR)
+                violations.forEach { output.append("  line ${it.line}: ${it.message}\n", OutputView.Kind.ERR) }
+                editor.setErrorLines(violations.map { it.line }.toSet())
+                finishRun(gen)
+                return@launch
+            }
+            if (!compiler.isAvailable()) {
+                output.append(compiler.missingMessage(), OutputView.Kind.ERR)
+                finishRun(gen)
+                return@launch
+            }
+
+            // 3) compile on a background thread
+            output.append("Compiling $name …\n", OutputView.Kind.INFO)
+            val dir = StorageHelper.workDir(this@MainActivity)
             val src = File(dir, "prog.c")
-            val exe = File(dir, "prog.o")
-            try {
-                src.writeText(code)
-                exe.delete()
-                runOnUiThread { output.append("Compiling $name …\n", OutputView.Kind.INFO) }
-                val res = compiler.compile(src, exe)
-                val text = res.output.replace("prog.c", name).trimEnd()
-                if (text.isNotEmpty()) {
-                    output.append(text + "\n", if (res.success) OutputView.Kind.INFO else OutputView.Kind.ERR)
-                }
-                if (res.success) {
-                    output.append("Running…\n\n", OutputView.Kind.INFO)
-                    val r = executor.run(compiler.runCommand(src), stdin, dir) { s, isErr ->
-                        output.append(s, if (isErr) OutputView.Kind.ERR else OutputView.Kind.OUT)
-                    }
-                    val secs = String.format(Locale.US, "%.2f", r.durationMs / 1000.0)
-                    val msg = when {
-                        r.cancelled -> "\n[Stopped]\n"
-                        r.timedOut -> "\n[Killed: exceeded ${ExecutorEngine.TIMEOUT_SEC}s time limit]\n"
-                        r.memoryKilled -> "\n[Killed: exceeded ${ExecutorEngine.MEMORY_LIMIT_KB / 1024} MB memory limit]\n"
-                        else -> "\n[Process exited with code ${r.exitCode} in ${secs}s]\n"
-                    }
-                    val bad = r.cancelled || r.timedOut || r.memoryKilled || r.exitCode != 0
-                    output.append(msg, if (bad) OutputView.Kind.ERR else OutputView.Kind.OK)
-                } else {
-                    output.append("\n[Compilation failed]\n", OutputView.Kind.ERR)
-                }
-            } catch (e: Exception) {
-                output.append("Error: ${e.message}\n", OutputView.Kind.ERR)
-            } finally {
-                runOnUiThread {
-                    running = false
-                    updateRunButton()
+            val obj = File(dir, "prog.o")
+            val res: CompilationResult = withContext(Dispatchers.IO) {
+                try {
+                    src.writeText(code)
+                    obj.delete()
+                    compiler.compile(src, obj)
+                } catch (e: Exception) {
+                    CompilationResult(false, "Error: ${e.message}", emptyList(), 0)
                 }
             }
-        }.start()
+            if (gen != runGeneration) return@launch
+
+            if (res.output.isNotBlank()) {
+                output.appendCompilerOutput(res.output.trimEnd(), src.name, name,
+                    if (res.success) OutputView.Kind.INFO else OutputView.Kind.ERR)
+            }
+            if (!res.success) {
+                editor.setErrorLines(res.diagnostics.filter { it.severity == "error" }.map { it.line }.toSet())
+                val hasLinks = res.diagnostics.any { it.severity == "error" }
+                output.append(
+                    if (hasLinks) "\n[Compilation failed — tap an error to jump to its line]\n" else "\n[Compilation failed]\n",
+                    OutputView.Kind.ERR
+                )
+                finishRun(gen)
+                return@launch
+            }
+
+            // 4) run (background coroutines inside ExecutorEngine; callbacks come back on the main thread)
+            output.append("Running…\n\n", OutputView.Kind.INFO)
+            val cmd = withContext(Dispatchers.IO) { compiler.runCommand(src) }
+            if (gen != runGeneration) return@launch
+            executor.start(cmd, dir, listenerFor(gen)) { gen == runGeneration }
+        }
     }
 }

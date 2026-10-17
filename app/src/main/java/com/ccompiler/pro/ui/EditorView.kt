@@ -5,7 +5,12 @@ import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
+import android.graphics.Color
 import android.text.Editable
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.BackgroundColorSpan
+import android.text.style.ForegroundColorSpan
 import android.text.InputFilter
 import android.text.InputType
 import android.text.TextWatcher
@@ -85,6 +90,11 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
     private var hintPrefixLen = 0
 
     var onContentChanged: (() -> Unit)? = null
+
+    /** Highlight for a line the compiler complained about (cleared on the next edit). */
+    private class ErrLineSpan : BackgroundColorSpan(0x44FF3B30)
+    private var errorLines: Set<Int> = emptySet()
+    private var gutterKey = ""
 
     private val zoom = GestureZoomController(ctx, { textSizeSp }, { s, done -> setTextSizeSp(s, done) })
 
@@ -193,6 +203,7 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
             override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
             override fun afterTextChanged(e: Editable?) {
                 if (loading) return
+                if (errorLines.isNotEmpty()) clearErrorLines()
                 undoMgr.onTextChanged(e?.toString() ?: "")
                 scheduleRefresh()
                 if (e.isNullOrEmpty()) {
@@ -296,6 +307,7 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
     fun getText(): String = edit.text?.toString() ?: ""
 
     fun setText(t: String) {
+        clearErrorLines()
         loading = true
         edit.setText(t)
         undoMgr.reset(t)
@@ -349,9 +361,48 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
             idx = nl + 1
             line++
         }
+        val pos = idx.coerceIn(0, t.length)
         edit.requestFocus()
-        edit.setSelection(idx.coerceIn(0, t.length))
-        edit.bringPointIntoView(idx.coerceIn(0, t.length))
+        edit.setSelection(pos)
+        // wait a moment: in Flip mode the editor pane is only just becoming visible again
+        scroll.postDelayed({
+            val l = edit.layout ?: return@postDelayed
+            val y = l.getLineTop(l.getLineForOffset(pos)) + edit.paddingTop
+            scroll.smoothScrollTo(0, (y - scroll.height / 3).coerceAtLeast(0))
+        }, 90)
+    }
+
+    /** Marks [lines] (1-based) with a red gutter badge and a light red background in the text. */
+    fun setErrorLines(lines: Set<Int>) {
+        clearErrorSpans()
+        errorLines = lines
+        val e = edit.text
+        if (e != null && lines.isNotEmpty()) {
+            val text = e.toString()
+            var n = 1
+            var start = 0
+            while (start <= text.length) {
+                var end = text.indexOf('\n', start)
+                if (end < 0) end = text.length
+                if (n in lines && end > start) e.setSpan(ErrLineSpan(), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                if (end >= text.length) break
+                start = end + 1
+                n++
+            }
+        }
+        updateGutter()
+    }
+
+    fun clearErrorLines() {
+        if (errorLines.isEmpty()) return
+        clearErrorSpans()
+        errorLines = emptySet()
+        updateGutter()
+    }
+
+    private fun clearErrorSpans() {
+        val e = edit.text ?: return
+        for (sp in e.getSpans(0, e.length, ErrLineSpan::class.java)) e.removeSpan(sp)
     }
 
     fun setZoomEnabled(on: Boolean) { zoom.enabled = on }
@@ -446,16 +497,27 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
         gutter.visibility = View.VISIBLE
         val l = edit.layout ?: return
         val t = edit.text ?: return
-        val sb = StringBuilder()
+        val ss = SpannableStringBuilder()
         var n = 1
         for (i in 0 until l.lineCount) {
             val st = l.getLineStart(i)
-            if (i == 0 || (st > 0 && t[st - 1] == '\n')) sb.append(n++)
-            sb.append('\n')
+            if (i == 0 || (st > 0 && t[st - 1] == '\n')) {
+                val from = ss.length
+                ss.append(n.toString())
+                if (n in errorLines) {
+                    ss.setSpan(BackgroundColorSpan(0xFFD32F2F.toInt()), from, ss.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    ss.setSpan(ForegroundColorSpan(Color.WHITE), from, ss.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+                n++
+            }
+            ss.append('\n')
         }
-        if (sb.isNotEmpty()) sb.setLength(sb.length - 1)
-        val s = sb.toString()
-        if (gutter.text.toString() != s) gutter.text = s
+        if (ss.isNotEmpty()) ss.delete(ss.length - 1, ss.length)
+        val key = ss.toString() + "|" + errorLines.hashCode()
+        if (key != gutterKey) {
+            gutterKey = key
+            gutter.text = ss
+        }
     }
 
     private fun updateCursorStatus() {

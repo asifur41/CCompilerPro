@@ -82,9 +82,26 @@ class CompilerEngine(private val ctx: Context) {
         proc?.destroyForcibly()
     }
 
-    /** Command that compiles `source` to memory and runs it (used by ExecutorEngine). */
-    fun runCommand(source: File): List<String> =
-        (Toolchain.baseArgs(ctx) ?: emptyList()) + listOf("-run", source.absolutePath)
+    /**
+     * Command that compiles `source` to memory and runs it. It runs a tiny wrapper that includes the
+     * user's file, renames its main(), and calls it after switching stdout to unbuffered mode.
+     * Without that, `printf("Enter a number: ")` would sit in a buffer while the program waits for input.
+     * Errors inside the user's file keep their own file name and line numbers.
+     */
+    fun runCommand(source: File): List<String> {
+        val wrapper = File(source.parentFile, "prog_run.c")
+        wrapper.writeText(
+            "#define main __ccp_user_main\n" +
+                "#include \"${source.name}\"\n" +
+                "#undef main\n" +
+                "#include <stdio.h>\n" +
+                "int main(int argc, char **argv) {\n" +
+                "    setvbuf(stdout, 0, _IONBF, 0);\n" +
+                "    return ((int (*)(int, char **))__ccp_user_main)(argc, argv);\n" +
+                "}\n"
+        )
+        return (Toolchain.baseArgs(ctx) ?: emptyList()) + listOf("-run", wrapper.name)
+    }
 
     private fun environment(pb: ProcessBuilder) {
         val env = pb.environment()
@@ -101,7 +118,7 @@ class CompilerEngine(private val ctx: Context) {
         val base = Toolchain.baseArgs(ctx)
             ?: return CompilationResult(false, missingMessage(), emptyList(), 0)
         return try {
-            val pb = ProcessBuilder(base + listOf("-Wall", "-c", "-o", output.absolutePath, source.absolutePath))
+            val pb = ProcessBuilder(base + listOf("-Wall", "-c", "-o", output.name, source.name))
             pb.directory(source.parentFile)
             pb.redirectErrorStream(true)
             environment(pb)
@@ -133,7 +150,7 @@ class CompilerEngine(private val ctx: Context) {
                 !finished -> "\nCompilation timed out after ${timeoutSec}s."
                 else -> ""
             }
-            CompilationResult(ok, text + note, parseDiagnostics(text), System.currentTimeMillis() - start, !finished, cancelled)
+            CompilationResult(ok, text + note, ErrorParser.parse(text, source.name), System.currentTimeMillis() - start, !finished, cancelled)
         } catch (e: Exception) {
             proc = null
             CompilationResult(
@@ -144,16 +161,4 @@ class CompilerEngine(private val ctx: Context) {
             )
         }
     }
-
-    private val diagRe = Regex("^[^:\\n]*:(\\d+):(?:(\\d+):)?\\s*(error|warning|note)?:?\\s*(.*)$", RegexOption.MULTILINE)
-
-    private fun parseDiagnostics(text: String): List<Diagnostic> =
-        diagRe.findAll(text).map {
-            Diagnostic(
-                it.groupValues[1].toIntOrNull() ?: 0,
-                it.groupValues[2].toIntOrNull() ?: 0,
-                it.groupValues[3].ifEmpty { "error" },
-                it.groupValues[4]
-            )
-        }.toList()
 }

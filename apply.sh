@@ -1,20 +1,15 @@
 #!/usr/bin/env bash
-# Run from the repo root after unzipping toolchain-patch.zip
+# Run from the repo root after `unzip -o patch2.zip`
 set -e
-F=app/src/main/java/com/ccompiler/pro/MainActivity.kt
-python3 - <<'PY'
-p='app/src/main/java/com/ccompiler/pro/MainActivity.kt'
-s=open(p).read()
-a='val exe = File(dir, "prog")'
-b='val r = executor.run(exe, stdin, dir) { s, isErr ->'
-if 'prog.o' in s:
-    print('MainActivity already patched')
-else:
-    assert a in s and b in s, 'MainActivity.kt does not look like the expected version'
-    s=s.replace(a,'val exe = File(dir, "prog.o")').replace(b,'val r = executor.run(compiler.runCommand(src), stdin, dir) { s, isErr ->')
-    open(p,'w').write(s)
-    print('MainActivity patched')
-PY
-chmod +x ci.sh scripts/build_tcc.sh scripts/fetch_fonts.sh gradlew 2>/dev/null || true
-rm -f toolchain-patch.zip
-echo "Patch applied. Now run:  ./ci.sh \"add tcc toolchain\""
+echo "== checking that the previous toolchain patch is present =="
+for f in scripts/build_tcc.sh app/src/main/assets/toolchain/include/stdio.h; do
+  [ -f "$f" ] || { echo "MISSING $f -> apply toolchain-patch.zip first"; exit 1; }
+done
+grep -q "TICK_MS" app/src/main/java/com/ccompiler/pro/compiler/ExecutorEngine.kt || { echo "new ExecutorEngine not in place"; exit 1; }
+grep -q "targetSdk = 34" app/build.gradle.kts || { echo "build.gradle.kts not updated"; exit 1; }
+chmod +x ci.sh scripts/*.sh gradlew 2>/dev/null || true
+rm -f patch2.zip
+echo
+git status --short | head -20
+echo
+echo "Patch applied. Now run:  ./ci.sh \"interactive input, error links, hints, targetSdk 34\""
