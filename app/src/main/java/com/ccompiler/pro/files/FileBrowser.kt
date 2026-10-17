@@ -148,7 +148,7 @@ object FileBrowser {
         val results = ArrayList<File>()
         val rows = ArrayList<String>()
         val adapter = ArrayAdapter(activity, android.R.layout.simple_list_item_1, rows)
-        val lv = ListView(activity).apply { adapter = adapter }
+        val lv = ListView(activity); lv.adapter = adapter
         val info = TextView(activity).apply { setPadding(0, activity.dp(6), 0, activity.dp(6)) }
         val box = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL

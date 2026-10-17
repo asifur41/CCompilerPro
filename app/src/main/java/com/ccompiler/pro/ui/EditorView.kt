@@ -120,7 +120,7 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
             InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
         edit.setPadding(context.dp(8), context.dp(8), context.dp(12), context.dp(8))
         edit.imeOptions = android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI
-        edit.filters = arrayOf(InputFilter { source, start, end, dest, dstart, _, _ ->
+        edit.filters = arrayOf(InputFilter { source, start, end, dest, dstart, _ ->
             if (end - start == 1 && source[start] == '\n') {
                 val s = dest.toString()
                 val ls = s.lastIndexOf('\n', dstart - 1) + 1
