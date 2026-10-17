@@ -483,7 +483,7 @@ class MainActivity : AppCompatActivity() {
         Thread {
             val dir = StorageHelper.workDir(this)
             val src = File(dir, "prog.c")
-            val exe = File(dir, "prog")
+            val exe = File(dir, "prog.o")
             try {
                 src.writeText(code)
                 exe.delete()
@@ -495,7 +495,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 if (res.success) {
                     output.append("Running…\n\n", OutputView.Kind.INFO)
-                    val r = executor.run(exe, stdin, dir) { s, isErr ->
+                    val r = executor.run(compiler.runCommand(src), stdin, dir) { s, isErr ->
                         output.append(s, if (isErr) OutputView.Kind.ERR else OutputView.Kind.OUT)
                     }
                     val secs = String.format(Locale.US, "%.2f", r.durationMs / 1000.0)

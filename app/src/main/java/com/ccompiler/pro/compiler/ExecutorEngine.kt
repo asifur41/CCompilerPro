@@ -39,10 +39,10 @@ class ExecutorEngine {
         }
     }
 
-    fun run(exe: File, stdin: String, workDir: File, onChunk: (String, Boolean) -> Unit): ExecResult {
+    fun run(command: List<String>, stdin: String, workDir: File, onChunk: (String, Boolean) -> Unit): ExecResult {
         cancelled = false
         val start = System.currentTimeMillis()
-        val pb = ProcessBuilder("/system/bin/sh", "-c", "ulimit -t 40 2>/dev/null; exec \"\$0\"", exe.absolutePath)
+        val pb = ProcessBuilder(listOf("/system/bin/sh", "-c", "ulimit -t 40 2>/dev/null; exec \"\$@\"", "sh") + command)
         pb.directory(workDir)
         val env = pb.environment()
         env.clear()

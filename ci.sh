@@ -6,5 +6,5 @@ if gh run watch "$ID" --exit-status >/dev/null 2>&1; then
   echo "BUILD SUCCEEDED ✅"
 else
   echo "BUILD FAILED ❌"
-  gh run view "$ID" --log-failed | grep -E "e: |error:|What went wrong" -A2 | head -n 60
+  gh run view "$ID" --log-failed | grep -E "e: |error:|ERROR|FAIL|What went wrong" -B1 -A3 | head -n 70
 fi

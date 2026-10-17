@@ -1,50 +1,68 @@
 package com.ccompiler.pro.compiler
 
 import android.content.Context
-import android.system.Os
 import java.io.File
 import java.util.concurrent.TimeUnit
 
 /**
- * Locates the bundled native C toolchain.
- *
- * Contract (see README "Compiler toolchain"):
- *   app/src/main/jniLibs/arm64-v8a/libchibicc.so  -> compiler driver, invoked as `chibicc -o <out> <src.c>`
- *   libas.so / libld.so / libcc.so ...            -> helper tools the driver calls by name (as, ld, cc)
- * Android only lets an app execute files from nativeLibraryDir, so tools are packaged as lib*.so and
- * symlinked under their real names into a private bin directory that is put first on PATH.
+ * Toolchain = a TinyCC executable built for Android arm64 by GitHub Actions (scripts/build_tcc.sh),
+ * shipped as jniLibs/arm64-v8a/libtccexe.so (Android only allows executing files from there).
+ * Programs are type-checked with `tcc -c` and executed with `tcc -run` (compiled to memory and run
+ * in that separate process), so no linker, assembler or writable-directory executable is needed.
  */
 object Toolchain {
-    val tools = listOf("chibicc", "cc", "as", "ld", "ar", "strip")
-
     fun nativeDir(ctx: Context) = File(ctx.applicationInfo.nativeLibraryDir)
-    /** Developer override: tools pushed with `adb` into files/toolchain/bin (works because targetSdk = 28). */
+    /** Developer override: an executable named `tcc` pushed to files/toolchain/bin. */
     fun userDir(ctx: Context) = File(ctx.filesDir, "toolchain/bin")
     fun sysroot(ctx: Context) = File(ctx.filesDir, "toolchain/sysroot")
-    private fun activeDir(ctx: Context) = File(ctx.filesDir, "toolchain/active")
 
-    private fun locate(ctx: Context, name: String): File? {
-        val packaged = File(nativeDir(ctx), "lib$name.so")
+    fun tcc(ctx: Context): File? {
+        val packaged = File(nativeDir(ctx), "libtccexe.so")
         if (packaged.exists()) return packaged
-        val user = File(userDir(ctx), name)
+        val user = File(userDir(ctx), "tcc")
         return if (user.exists()) user else null
     }
 
-    fun compiler(ctx: Context): File? = locate(ctx, "chibicc")
+    /** Copies assets/toolchain (C headers) to private storage once per header version. */
+    @Synchronized
+    fun ensureExtracted(ctx: Context): File {
+        val root = sysroot(ctx)
+        val wanted = try {
+            ctx.assets.open("toolchain/version.txt").bufferedReader().use { it.readText().trim() }
+        } catch (e: Exception) {
+            return root
+        }
+        val marker = File(root, ".version")
+        if (marker.exists() && marker.readText().trim() == wanted) return root
+        root.deleteRecursively()
+        root.mkdirs()
+        copyAssetDir(ctx, "toolchain", root)
+        marker.writeText(wanted)
+        return root
+    }
 
-    /** Rebuilds the PATH directory of symlinks and returns it. */
-    fun prepare(ctx: Context): File {
-        val dir = activeDir(ctx)
-        dir.mkdirs()
-        dir.listFiles()?.forEach { it.delete() }
-        for (t in tools) {
-            val src = locate(ctx, t) ?: continue
-            try {
-                Os.symlink(src.absolutePath, File(dir, t).absolutePath)
-            } catch (_: Exception) {
+    private fun copyAssetDir(ctx: Context, path: String, dest: File) {
+        val names = ctx.assets.list(path) ?: return
+        dest.mkdirs()
+        for (n in names) {
+            val child = "$path/$n"
+            val sub = ctx.assets.list(child)
+            if (sub != null && sub.isNotEmpty()) {
+                copyAssetDir(ctx, child, File(dest, n))
+            } else {
+                ctx.assets.open(child).use { input -> File(dest, n).outputStream().use { input.copyTo(it) } }
             }
         }
-        return dir
+    }
+
+    fun baseArgs(ctx: Context): List<String>? {
+        val t = tcc(ctx) ?: return null
+        val root = ensureExtracted(ctx)
+        return listOf(
+            t.absolutePath, "-nostdinc", "-nostdlib",
+            "-I" + File(root, "include").absolutePath,
+            "-I" + File(root, "tccinclude").absolutePath
+        )
     }
 }
 
@@ -52,34 +70,41 @@ class CompilerEngine(private val ctx: Context) {
     @Volatile private var proc: Process? = null
     @Volatile private var cancelled = false
 
-    fun isAvailable(): Boolean = Toolchain.compiler(ctx) != null
+    fun isAvailable(): Boolean = Toolchain.tcc(ctx) != null
 
     fun missingMessage(): String =
-        "No C toolchain is installed in this build.\n\n" +
-            "CCompiler Pro expects a compiler driver packaged as libchibicc.so (plus libas.so / libld.so)\n" +
-            "in app/src/main/jniLibs/arm64-v8a/. See README.md, section \"Compiler toolchain\".\n"
+        "The C compiler (libtccexe.so) is not inside this APK.\n\n" +
+            "It is built by the GitHub Actions workflow (scripts/build_tcc.sh). " +
+            "Rebuild the APK from the latest workflow run. See README.md.\n"
 
     fun cancel() {
         cancelled = true
         proc?.destroyForcibly()
     }
 
+    /** Command that compiles `source` to memory and runs it (used by ExecutorEngine). */
+    fun runCommand(source: File): List<String> =
+        (Toolchain.baseArgs(ctx) ?: emptyList()) + listOf("-run", source.absolutePath)
+
+    private fun environment(pb: ProcessBuilder) {
+        val env = pb.environment()
+        env.clear()
+        env["PATH"] = "/system/bin"
+        env["HOME"] = ctx.filesDir.absolutePath
+        env["TMPDIR"] = ctx.cacheDir.absolutePath
+    }
+
+    /** Syntax/semantic check: `tcc -Wall -c -o <output> <source>`. */
     fun compile(source: File, output: File, timeoutSec: Long = 15): CompilationResult {
         cancelled = false
         val start = System.currentTimeMillis()
-        val cc = Toolchain.compiler(ctx)
+        val base = Toolchain.baseArgs(ctx)
             ?: return CompilationResult(false, missingMessage(), emptyList(), 0)
-        val bin = Toolchain.prepare(ctx)
         return try {
-            val pb = ProcessBuilder(cc.absolutePath, "-o", output.absolutePath, source.absolutePath)
+            val pb = ProcessBuilder(base + listOf("-Wall", "-c", "-o", output.absolutePath, source.absolutePath))
             pb.directory(source.parentFile)
             pb.redirectErrorStream(true)
-            val env = pb.environment()
-            env.clear()
-            env["PATH"] = bin.absolutePath + ":/system/bin"
-            env["HOME"] = ctx.filesDir.absolutePath
-            env["TMPDIR"] = ctx.cacheDir.absolutePath
-            env["CC_SYSROOT"] = Toolchain.sysroot(ctx).absolutePath
+            environment(pb)
             val p = pb.start()
             proc = p
             val sb = StringBuilder()
@@ -102,20 +127,19 @@ class CompilerEngine(private val ctx: Context) {
             reader.join(1000)
             proc = null
             val text = sb.toString()
-            val diags = parseDiagnostics(text)
-            val ok = finished && !cancelled && p.exitValue() == 0 && output.exists()
+            val ok = finished && !cancelled && p.exitValue() == 0
             val note = when {
                 cancelled -> "\nCompilation cancelled."
                 !finished -> "\nCompilation timed out after ${timeoutSec}s."
                 else -> ""
             }
-            CompilationResult(ok, text + note, diags, System.currentTimeMillis() - start, !finished, cancelled)
+            CompilationResult(ok, text + note, parseDiagnostics(text), System.currentTimeMillis() - start, !finished, cancelled)
         } catch (e: Exception) {
             proc = null
             CompilationResult(
                 false,
                 "Could not start the compiler: ${e.message}\n" +
-                    "(If this says 'Permission denied', the toolchain file is not executable or Android blocked it.)",
+                    "(libtccexe.so must be an arm64 executable; check the Actions log of scripts/build_tcc.sh.)",
                 emptyList(), System.currentTimeMillis() - start
             )
         }

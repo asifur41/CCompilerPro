@@ -21,6 +21,9 @@ jobs:
     - name: Fetch bundled fonts (bundled into the APK, no runtime download)
       run: bash scripts/fetch_fonts.sh
 
+    - name: Build C compiler (TinyCC for Android arm64, via NDK)
+      run: bash scripts/build_tcc.sh
+
     - name: Set up Gradle 8.5
       uses: gradle/actions/setup-gradle@v4
       with:
