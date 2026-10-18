@@ -1,6 +1,7 @@
 package com.ccompiler.pro.compiler
 
 import android.content.Context
+import androidx.core.content.pm.PackageInfoCompat
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -28,7 +29,11 @@ object Toolchain {
     fun ensureExtracted(ctx: Context): File {
         val root = sysroot(ctx)
         val wanted = try {
-            ctx.assets.open("toolchain/version.txt").bufferedReader().use { it.readText().trim() }
+            val headers = ctx.assets.open("toolchain/version.txt").bufferedReader().use { it.readText().trim() }
+            val app = try {
+                PackageInfoCompat.getLongVersionCode(ctx.packageManager.getPackageInfo(ctx.packageName, 0))
+            } catch (e: Exception) { 0L }
+            "$headers|app$app"          // refreshed on every app update, also for the CI-generated tccinclude
         } catch (e: Exception) {
             return root
         }

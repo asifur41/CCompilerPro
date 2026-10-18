@@ -39,6 +39,19 @@ file tcc_android 2>/dev/null || true
 # 2) host x86-64 build, only used to smoke-test our headers against the sample programs
 gcc "${COMMON[@]}" -DTCC_TARGET_X86_64 tcc.c -o tcc_host -lm -ldl
 
+echo "--- 16 KB page-size check of the Android binary (needed on devices with 16 KB pages)"
+if [ -x "$BIN/llvm-readelf" ]; then
+  ALIGNS="$("$BIN/llvm-readelf" -lW tcc_android | awk '$1=="LOAD"{print $NF}')"
+  echo "LOAD segment alignments: $(echo $ALIGNS | tr '\n' ' ')"
+  for a in $ALIGNS; do
+    [ $((a)) -ge 16384 ] || { echo "ERROR: LOAD segment alignment $a is smaller than 0x4000 (16 KB)"; exit 1; }
+  done
+else
+  echo "WARNING: llvm-readelf not found, 16 KB alignment check skipped"
+fi
+echo "--- page-size handling inside tcc's run-in-memory code (for 16 KB devices):"
+grep -n "PAGESIZE\|getpagesize\|sysconf" tccrun.c libtcc.c tcc.h 2>/dev/null | head -12 || true
+
 mkdir -p "$ROOT/build-info"
 {
   echo "upstream:   $(git config --get remote.origin.url)"
@@ -85,7 +98,7 @@ import re, sys
 rx = re.compile(r"^([^\s:][^:\n]*):(\d+):(?:(\d+):)?\s*(error|warning)\s*:\s*(.*)$", re.M)
 hints = ["';' expected", "undeclared", "implicit declaration", "too many arguments", "too few arguments",
          "')' expected", "'}' expected", "']' expected", "'(' expected", "'{' expected", "'[' expected",
-         "declaration expected"]
+         "declaration expected", "identifier expected", "',' expected"]
 name, out, want = sys.argv[1], open(sys.argv[2]).read(), sys.argv[3]
 ds = [(int(m.group(2)), m.group(4), m.group(5)) for m in rx.finditer(out) if m.group(1).split("/")[-1] == name]
 print("   parsed:", ds)
@@ -94,7 +107,7 @@ msg = ds[0][2].lower()
 hit = [h for h in hints if h in msg]
 print("   RESULT:", "OK" if want in msg and hit else "CHECK", "| first message:", ds[0][2], "| hint key:", hit[:1])
 PY
-for pair in "semi.c:';' expected" "undecl.c:undeclared" "implicit.c:implicit declaration" "brace.c:'}' expected" "paren.c:')' expected" "few.c:too few arguments" "many.c:too many arguments"; do
+for pair in "semi.c:';' expected" "undecl.c:undeclared" "implicit.c:implicit declaration" "brace.c:identifier expected" "paren.c:',' expected" "few.c:too few arguments" "many.c:too many arguments"; do
   f="${pair%%:*}"; want="${pair#*:}"
   echo "-- $f (expecting: $want)"
   "$T" "${OPTS[@]}" -Wall -c -o /dev/null "$f" > "$f.out" 2>&1

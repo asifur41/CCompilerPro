@@ -62,11 +62,29 @@ object CodeSanitizer {
         return line
     }
 
+    private val identifier = Regex("[A-Za-z_]\\w*")
+
+    /** True if the program itself defines a function with this name (a real definition with a body). */
+    private fun definedByUser(name: String, code: String): Boolean =
+        Regex("\\b(?:void|int|char|short|long|float|double|unsigned|signed|size_t|bool|struct\\s+\\w+|\\w+_t)[\\s*]+" +
+            Regex.escape(name) + "\\s*\\([^{};]*\\)\\s*\\{").containsMatchIn(code)
+
+    /** True for `obj.name(` and `ptr->name(`: a struct member / function pointer, not the libc function. */
+    private fun isMemberCall(code: String, index: Int): Boolean {
+        var j = index - 1
+        while (j >= 0 && (code[j] == ' ' || code[j] == '\t')) j--
+        return j >= 0 && (code[j] == '.' || (code[j] == '>' && j > 0 && code[j - 1] == '-'))
+    }
+
     fun check(source: String): List<Violation> {
         val (withStrings, masked) = scan(source)
         val out = ArrayList<Violation>()
         for ((re, msg) in callRules) {
-            for (m in re.findAll(masked)) out.add(Violation(lineOf(masked, m.range.first), msg))
+            for (m in re.findAll(masked)) {
+                val name = identifier.find(m.value)?.value
+                if (name != null && (isMemberCall(masked, m.range.first) || definedByUser(name, masked))) continue
+                out.add(Violation(lineOf(masked, m.range.first), msg))
+            }
         }
         for (m in includeRule.findAll(withStrings)) out.add(Violation(lineOf(withStrings, m.range.first), "network/process header is not allowed"))
         for (m in pathRule.findAll(withStrings)) out.add(Violation(lineOf(withStrings, m.range.first), "access to /proc/, /sys/ and /dev/ is not allowed"))

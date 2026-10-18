@@ -7,7 +7,7 @@ mkdir -p "$D"
 get() {
   out="$1"; url="$2"
   if [ -s "$D/$out" ]; then echo "have $out"; return; fi
-  if curl -fsSL --retry 3 -o "$D/$out" "$url"; then echo "ok   $out"; else echo "WARNING: could not fetch $out"; rm -f "$D/$out"; fi
+  if curl -fsSL --retry 3 -o "$D/$out" "$url"; then echo "ok   $out"; else echo "::warning::Font $out could not be downloaded - the app will fall back to the system monospace font"; rm -f "$D/$out"; fi
 }
 get roboto_mono.ttf     "https://github.com/google/fonts/raw/main/apache/robotomono/RobotoMono%5Bwght%5D.ttf"
 get fira_code.ttf       "https://github.com/google/fonts/raw/main/ofl/firacode/FiraCode%5Bwght%5D.ttf"

@@ -67,6 +67,12 @@ object ErrorHints {
         "'(' expected" to BRACKETS,
         "'{' expected" to BRACKETS,
         "'[' expected" to BRACKETS,
+        "identifier expected" to
+            "The compiler expected a name here but found something else, or the end of the file. This is often " +
+            "caused by a missing closing brace } earlier in the file, or by a stray character. Check that every { has a matching }.",
+        "',' expected" to
+            "Inside the parentheses of a call or declaration the compiler expected a comma or a closing ). " +
+            "Check this line for a missing ) or a missing comma between the arguments.",
         "declaration expected" to
             "Something is written where only a declaration or function may appear – usually an extra } above, " +
             "or code placed outside of a function.",

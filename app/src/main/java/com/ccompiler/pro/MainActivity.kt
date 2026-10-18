@@ -37,6 +37,7 @@ import com.ccompiler.pro.ui.EditorView
 import com.ccompiler.pro.ui.OnboardingActivity
 import com.ccompiler.pro.ui.OutputView
 import com.ccompiler.pro.ui.PaneLayout
+import com.ccompiler.pro.utils.CrashLog
 import com.ccompiler.pro.utils.LinkOpener
 import com.ccompiler.pro.utils.NotificationHelper
 import com.ccompiler.pro.utils.Prefs
@@ -100,6 +101,7 @@ class MainActivity : AppCompatActivity() {
     // ------------------------------------------------------------------ lifecycle
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        CrashLog.install(this)
         ThemeManager.applyNightMode(this)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -164,8 +166,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        outState.putString("code", editor.getText())
-        outState.putString("savedText", savedText)
+        val code = editor.getText()
+        if (code.length <= 150_000) {            // larger text is restored from the file / autosave draft instead
+            outState.putString("code", code)
+            outState.putString("savedText", savedText)
+        }
         outState.putString("file", currentFile?.absolutePath)
         outState.putString("untitled", untitledName)
     }
@@ -345,7 +350,8 @@ class MainActivity : AppCompatActivity() {
             .setTitle("CCompiler Pro")
             .setMessage(
                 "Version ${LinkOpener.versionName(this)}\n\nOffline C compiler & editor.\n\n" +
-                    "Developer: Md Asifur Rahman\nBangladesh\n${LinkOpener.EMAIL}"
+                    "Developer: Md Asifur Rahman\nBangladesh\n${LinkOpener.EMAIL}\n\n" +
+                    "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}), memory page size ${LinkOpener.pageSize()}"
             )
             .setPositiveButton("OK", null)
             .setNeutralButton("Website") { _, _ -> LinkOpener.openLink(this, LinkOpener.WEBSITE) }
@@ -516,6 +522,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Exit codes 128+N (or -N) mean the program was killed by signal N. */
+    private fun crashHint(code: Int): String? = when (code) {
+        139, -11 -> "The program crashed (segmentation fault): usually a NULL or bad pointer, or an array index out of range."
+        134, -6 -> "The program called abort(): for example a failed assert(), or a bad free() / double free."
+        136, -8 -> "The program crashed with an arithmetic error: usually a division by zero."
+        135, -7 -> "The program crashed (bus error): usually a bad pointer or misaligned memory access."
+        132, -4 -> "The program tried to run an illegal instruction: often caused by memory corruption."
+        else -> null
+    }
+
     private fun listenerFor(gen: Int) = object : ExecutorEngine.Listener {
         override fun onOutput(text: String, isErr: Boolean) {
             if (gen == runGeneration) output.append(text, if (isErr) OutputView.Kind.ERR else OutputView.Kind.OUT)
@@ -541,6 +557,9 @@ class MainActivity : AppCompatActivity() {
             }
             val bad = result.cancelled || result.outputLimit || result.timedOut || result.memoryKilled || result.exitCode != 0
             output.append(msg, if (bad) OutputView.Kind.ERR else OutputView.Kind.OK)
+            if (!result.cancelled && !result.timedOut && !result.memoryKilled && !result.outputLimit) {
+                crashHint(result.exitCode)?.let { output.append("💡 $it\n", OutputView.Kind.OK) }
+            }
             output.setInputVisible(false)
             finishRun(gen)
         }
@@ -579,6 +598,11 @@ class MainActivity : AppCompatActivity() {
                 output.append("Blocked by security check:\n", OutputView.Kind.ERR)
                 violations.forEach { output.append("  line ${it.line}: ${it.message}\n", OutputView.Kind.ERR) }
                 editor.setErrorLines(violations.map { it.line }.toSet())
+                finishRun(gen)
+                return@launch
+            }
+            if (!Regex("\\bmain\\s*\\(").containsMatchIn(code)) {
+                output.append("No main() function found. A C program needs: int main() { ... }\n", OutputView.Kind.ERR)
                 finishRun(gen)
                 return@launch
             }

@@ -125,6 +125,8 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
 
         // ---- editor body
         edit.background = null
+        // The field is typed "visible password" only to switch off auto-correct; keep autofill services away from it.
+        edit.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
         edit.gravity = Gravity.TOP or Gravity.START
         edit.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or
             InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
@@ -465,7 +467,8 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
     // ------------------------------------------------------------------ zoom / refresh / hints
 
     private fun setTextSizeSp(sp: Float, persist: Boolean, showIndicator: Boolean = true) {
-        val s = sp.coerceIn(GestureZoomController.MIN_SP, GestureZoomController.MAX_SP)
+        val clamped = sp.coerceIn(GestureZoomController.MIN_SP, GestureZoomController.MAX_SP)
+        val s = if (persist) Math.round(clamped).toFloat() else clamped   // saved size is always a whole number
         textSizeSp = s
         edit.setTextSize(TypedValue.COMPLEX_UNIT_SP, s)
         gutter.setTextSize(TypedValue.COMPLEX_UNIT_SP, s)
@@ -486,7 +489,11 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
 
     private fun refreshNow() {
         val e = edit.text ?: return
-        if (highlightOn && e.length < 60_000) highlighter.highlight(e) else highlighter.clear(e)
+        try {
+            if (highlightOn && e.length < 60_000) highlighter.highlight(e) else highlighter.clear(e)
+        } catch (t: Throwable) {          // e.g. StackOverflowError of java.util.regex on a huge string literal
+            highlighter.clear(e)
+        }
         updateGutter()
         updateHints()
         updateCursorStatus()
@@ -501,7 +508,7 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
         var n = 1
         for (i in 0 until l.lineCount) {
             val st = l.getLineStart(i)
-            if (i == 0 || (st > 0 && t[st - 1] == '\n')) {
+            if (i == 0 || (st in 1..t.length && t[st - 1] == '\n')) {
                 val from = ss.length
                 ss.append(n.toString())
                 if (n in errorLines) {

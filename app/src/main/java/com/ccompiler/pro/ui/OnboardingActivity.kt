@@ -33,6 +33,7 @@ class OnboardingActivity : AppCompatActivity() {
         ThemeManager.applyNightMode(this)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_onboarding)
+        Prefs.put(this, Prefs.ONBOARDED, true)   // shown once; "Replay tutorial" in Settings shows it again
         val p = ThemeManager.palette(this)
         findViewById<LinearLayout>(R.id.onb_root).setBackgroundColor(p.bg)
         window.statusBarColor = p.bg

@@ -73,6 +73,7 @@ class OutputView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
         inputBox.hint = "Program is waiting for input…"
         inputBox.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         inputBox.setSingleLine()
+        inputBox.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
         inputBox.imeOptions = EditorInfo.IME_ACTION_SEND
         inputBox.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
         inputBox.setPadding(context.dp(12), context.dp(10), context.dp(12), context.dp(10))

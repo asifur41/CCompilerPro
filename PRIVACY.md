@@ -6,8 +6,9 @@
 * **No permissions.** It requests no permissions (no storage, contacts, location, camera, microphone). Files are kept in the app's private storage; moving files in or out happens only through Android's file picker, which you control.
 * **No accounts, no analytics, no ads, no tracking, no crash reporting, no third-party SDKs.** The only libraries are AndroidX / Material components and Kotlin coroutines (see the dependency list in each release's TRUST_REPORT).
 * **Your code stays on your phone.** Programs are compiled and run locally by a bundled C compiler (TinyCC) running as a child process of the app.
-* **Actions you start yourself:** "Visit Developer Website" and "Donate" open your browser; "Report a Bug" opens your email app with a draft containing Android version, device model and app version (you can edit or cancel it); "Share Code" opens Android's share sheet.
+* **Actions you start yourself:** "Visit Developer Website", "Donate" and "Check for updates" open your browser; "Report a Bug" opens your email app with a draft containing Android version, device model and app version (you can edit or cancel it); "Share Code" opens Android's share sheet.
 * **Auto-save** writes only to the app's private storage.
+* **If the app crashes,** a short technical log (error text with class names and line numbers, never your code or files) is saved on the phone only. It is attached to a bug-report email only if you decide to send one.
 
 ## Verify it yourself
 Every release is built in public by GitHub Actions from this repository and published with:

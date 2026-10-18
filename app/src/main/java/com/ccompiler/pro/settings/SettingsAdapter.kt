@@ -78,8 +78,14 @@ class SettingsAdapter(
                 item.subtitle?.let { s -> col.addView(label(s, 12f, sub())) }
                 val sw = SwitchCompat(ctx)
                 sw.isChecked = Prefs.bool(ctx, item.key, item.default)
-                sw.thumbTintList = ColorStateList.valueOf(palette.accent)
-                sw.trackTintList = ColorStateList.valueOf(ColorUtils.setAlphaComponent(palette.accent, 110))
+                // ON = accent colour, OFF = grey, so the two states are clearly different
+                val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf(-android.R.attr.state_checked))
+                val offThumb = ColorUtils.blendARGB(palette.bg, palette.text, 0.55f)
+                sw.thumbTintList = ColorStateList(states, intArrayOf(palette.accent, offThumb))
+                sw.trackTintList = ColorStateList(
+                    states,
+                    intArrayOf(ColorUtils.setAlphaComponent(palette.accent, 150), ColorUtils.setAlphaComponent(palette.text, 70))
+                )
                 sw.setOnCheckedChangeListener { _, on -> Prefs.put(ctx, item.key, on); onChanged(item.key) }
                 row.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
                 row.addView(sw)
@@ -87,7 +93,8 @@ class SettingsAdapter(
             }
             is SettingItem.Choice -> bindChoice(box, item)
             is SettingItem.SliderRow -> {
-                val v0 = Prefs.float(ctx, item.key, item.default).coerceIn(item.min, item.max)
+                // round to a whole step: pinch-zoom may have saved e.g. 15.37, which Slider (stepSize 1) rejects with a crash
+                val v0 = Math.round(Prefs.float(ctx, item.key, item.default)).toFloat().coerceIn(item.min, item.max)
                 val title = label("${item.title}: ${v0.toInt()} px", 16f, palette.text)
                 val slider = Slider(ctx).apply {
                     valueFrom = item.min; valueTo = item.max; stepSize = 1f

@@ -8,12 +8,14 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.ccompiler.pro.R
+import com.ccompiler.pro.utils.CrashLog
 import com.ccompiler.pro.utils.LinkOpener
 import com.ccompiler.pro.utils.Prefs
 
 class SettingsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        CrashLog.install(this)
         ThemeManager.applyNightMode(this)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.fragment_settings)
@@ -55,6 +57,10 @@ class SettingsActivity : AppCompatActivity() {
             SettingItem.Action("Visit Developer Website", null) { LinkOpener.openLink(this, LinkOpener.WEBSITE) },
 
             SettingItem.Header("Support"),
+            SettingItem.Action(
+                "Check for updates",
+                "Installed: ${LinkOpener.versionName(this)}. Opens the latest release page in your browser."
+            ) { LinkOpener.openLink(this, LinkOpener.RELEASES) },
             SettingItem.Action("Report a Bug", null) { LinkOpener.reportBug(this) },
             SettingItem.Action("Donate", null) { LinkOpener.openLink(this, LinkOpener.DONATE) },
             SettingItem.Action("Replay tutorial", null) {
