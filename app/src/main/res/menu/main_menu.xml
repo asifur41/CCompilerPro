@@ -6,6 +6,7 @@
         <item android:id="@+id/menu_samples" android:title="@string/menu_samples" />
         <item android:id="@+id/menu_save" android:title="@string/menu_save" />
         <item android:id="@+id/menu_save_as" android:title="@string/menu_save_as" />
+        <item android:id="@+id/menu_rename" android:title="@string/menu_rename" />
         <item android:id="@+id/menu_export" android:title="@string/menu_export" />
         <item android:id="@+id/menu_share" android:title="@string/menu_share" />
     </group>

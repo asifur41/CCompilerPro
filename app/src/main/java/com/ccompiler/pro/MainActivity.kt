@@ -198,8 +198,8 @@ class MainActivity : AppCompatActivity() {
                 savedText = ""            // an unsaved draft counts as modified
             }
             else -> {
-                editor.setText(editor.defaultCode)
-                savedText = editor.defaultCode
+                editor.setText(editor.starterCode)      // very first launch only: Hello World
+                savedText = editor.starterCode
             }
         }
     }
@@ -252,7 +252,7 @@ class MainActivity : AppCompatActivity() {
         val visible = screenH - r.height() > screenH * 0.15f
         if (visible != keyboardVisible) {
             keyboardVisible = visible
-            editor.setZoomEnabled(!visible)     // pinch-zoom is disabled while the keyboard is up
+            // pinch-zoom now also works while typing (it used to be switched off while the keyboard was open)
         }
     }
 
@@ -325,11 +325,12 @@ class MainActivity : AppCompatActivity() {
         menuInflater.inflate(R.menu.main_menu, pm.menu)
         pm.setOnMenuItemClickListener { item ->
             when (item.itemId) {
-                R.id.menu_new -> confirmDiscardThen { newFile() }
+                R.id.menu_new -> confirmDiscardThen { promptNewFile() }
                 R.id.menu_open -> openFileDialog()
                 R.id.menu_samples -> samplesDialog()
                 R.id.menu_save -> save()
                 R.id.menu_save_as -> saveAs()
+                R.id.menu_rename -> renameCurrentFile()
                 R.id.menu_export -> exportFile()
                 R.id.menu_share -> ShareHelper.show(
                     this, editor.getText(), output.text(), currentFile?.name ?: untitledName,
@@ -365,14 +366,66 @@ class MainActivity : AppCompatActivity() {
         if (f != null) Prefs.put(this, Prefs.CURRENT_FILE, f.absolutePath) else Prefs.remove(this, Prefs.CURRENT_FILE)
     }
 
-    private fun newFile() {
-        editor.setText(editor.defaultCode)
-        savedText = editor.defaultCode
-        untitledName = "untitled.c"
-        setCurrent(null)
-        StorageHelper.draftFile(this).delete()
-        output.clear()
-        updateTitle()
+    /** New File: asks for a name, creates the file (containing only #include <stdio.h>) and opens it. */
+    private fun promptNewFile() {
+        val root = StorageHelper.projectsRoot(this)
+        FileBrowser.promptFileName(
+            this, "Input file name", "", "Create",
+            check = { name -> if (File(root, name).exists()) "A file named $name already exists" else null }
+        ) { name ->
+            val f = File(root, name)
+            try {
+                FileManager.write(f, editor.defaultCode)
+                output.clear()
+                loadFile(f)
+                editor.moveCursorToEnd()
+            } catch (e: Exception) {
+                NotificationHelper.toast(this, "Could not create $name")
+            }
+        }
+    }
+
+    /**
+     * Rename Current File. A file on disk is renamed in place (unsaved edits stay unsaved). Text that has no
+     * file yet (untitled.c or a sample) is given the chosen name and saved as a real file.
+     */
+    private fun renameCurrentFile() {
+        val cur = currentFile
+        val folder = cur?.parentFile ?: StorageHelper.projectsRoot(this)
+        FileBrowser.promptFileName(
+            this, "Rename current file", cur?.name ?: untitledName, "Rename",
+            check = { name ->
+                val target = File(folder, name)
+                when {
+                    cur != null && target.absolutePath == cur.absolutePath -> null
+                    target.exists() -> "A file named $name already exists"
+                    else -> null
+                }
+            }
+        ) { name ->
+            try {
+                if (cur != null) {
+                    if (name != cur.name) {
+                        val renamed = FileManager.rename(cur, name)
+                        if (renamed == null) {
+                            NotificationHelper.toast(this, "Rename failed")
+                            return@promptFileName
+                        }
+                        setCurrent(renamed)
+                    }
+                } else {
+                    val target = File(folder, name)
+                    FileManager.write(target, editor.getText())
+                    savedText = editor.getText()
+                    setCurrent(target)
+                    StorageHelper.draftFile(this).delete()
+                }
+                updateTitle()
+                NotificationHelper.toast(this, "Renamed to $name")
+            } catch (e: Exception) {
+                NotificationHelper.toast(this, "Rename failed: ${e.message}")
+            }
+        }
     }
 
     private fun loadFile(f: File) {

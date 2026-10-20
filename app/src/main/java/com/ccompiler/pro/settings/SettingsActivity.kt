@@ -1,6 +1,7 @@
 package com.ccompiler.pro.settings
 
 import android.os.Bundle
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -26,8 +27,8 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<LinearLayout>(R.id.settings_root).setBackgroundColor(p.bg)
         findViewById<LinearLayout>(R.id.settings_bar).setBackgroundColor(p.editorBg)
         findViewById<TextView>(R.id.settings_heading).setTextColor(p.text)
-        findViewById<TextView>(R.id.settings_back).apply {
-            setTextColor(p.text)
+        findViewById<ImageButton>(R.id.settings_back).apply {
+            setColorFilter(p.text)
             setOnClickListener { finish() }
         }
 
@@ -57,10 +58,18 @@ class SettingsActivity : AppCompatActivity() {
             SettingItem.Action("Visit Developer Website", null) { LinkOpener.openLink(this, LinkOpener.WEBSITE) },
 
             SettingItem.Header("Support"),
-            SettingItem.Action(
-                "Check for updates",
-                "Installed: ${LinkOpener.versionName(this)}. Opens the latest release page in your browser."
-            ) { LinkOpener.openLink(this, LinkOpener.RELEASES) },
+            SettingItem.Action("Join Community", "Chat with other users on WhatsApp") {
+                LinkOpener.openLink(this, LinkOpener.COMMUNITY)
+            },
+            SettingItem.Action("Download the latest APK", "Direct download of the newest version") {
+                LinkOpener.openLink(this, LinkOpener.APK_DOWNLOAD)
+            },
+            SettingItem.Action("Visit GitHub releases", "Installed: ${LinkOpener.versionName(this)}. See what is new.") {
+                LinkOpener.openLink(this, LinkOpener.RELEASES)
+            },
+            SettingItem.Action("Leave a review", "Tell others what you think of the app") {
+                LinkOpener.openLink(this, LinkOpener.REVIEW)
+            },
             SettingItem.Action("Report a Bug", null) { LinkOpener.reportBug(this) },
             SettingItem.Action("Donate", null) { LinkOpener.openLink(this, LinkOpener.DONATE) },
             SettingItem.Action("Replay tutorial", null) {

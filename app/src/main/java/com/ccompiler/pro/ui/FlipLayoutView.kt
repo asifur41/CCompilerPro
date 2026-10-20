@@ -1,6 +1,7 @@
 package com.ccompiler.pro.ui
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.util.AttributeSet
 import android.view.GestureDetector
 import android.view.LayoutInflater
@@ -127,6 +128,7 @@ class FlipLayoutView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet
         setBackgroundColor(p.bg)
         header.setBackgroundColor(ColorUtils.blendARGB(p.bg, p.accent, 0.25f))
         btnBack.setTextColor(p.text)
+        btnBack.compoundDrawableTintList = ColorStateList.valueOf(p.text)
         title.setTextColor(p.text)
         btnCopy.setTextColor(p.text)
     }

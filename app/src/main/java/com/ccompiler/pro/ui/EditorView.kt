@@ -47,6 +47,27 @@ import java.util.regex.PatternSyntaxException
  */
 class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = null) : LinearLayout(ctx, attrs) {
 
+    /**
+     * Wraps the scrolling editor. When a second finger touches down it takes over the touch stream (the
+     * editor gets ACTION_CANCEL), so the ScrollViews and the text field can no longer steal the pinch, and
+     * it feeds every event to the zoom detector.
+     */
+    private inner class ZoomLayout(ctx: Context) : FrameLayout(ctx) {
+        override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
+            zoom.observe(ev)
+            if (zoom.enabled && ev.actionMasked == MotionEvent.ACTION_POINTER_DOWN && ev.pointerCount == 2) {
+                parent?.requestDisallowInterceptTouchEvent(true)
+                return true
+            }
+            return false
+        }
+
+        override fun onTouchEvent(ev: MotionEvent): Boolean {
+            zoom.observe(ev)
+            return true     // keep the rest of the gesture: lifting one finger must not move the cursor
+        }
+    }
+
     class CodeEditText(ctx: Context) : AppCompatEditText(ctx) {
         var onSelection: ((Int, Int) -> Unit)? = null
         override fun onSelectionChanged(selStart: Int, selEnd: Int) {
@@ -55,7 +76,11 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
         }
     }
 
-    val defaultCode: String =
+    /** Shown after "Clear Editor", when the editor is emptied, and in every newly created file. */
+    val defaultCode: String = "#include <stdio.h>\n"
+
+    /** Hello World, shown only on the very first launch of the app. */
+    val starterCode: String =
         ctx.resources.openRawResource(R.raw.default_hello_world).bufferedReader().use { it.readText() }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -68,7 +93,7 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
     private val row = LinearLayout(ctx)
     private val holder = FrameLayout(ctx)
     private val hScroll = HorizontalScrollView(ctx)
-    private val body = FrameLayout(ctx)
+    private val body = ZoomLayout(ctx)
     private val zoomLabel = TextView(ctx)
 
     private val toolbar = LinearLayout(ctx)
@@ -101,7 +126,7 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
     private val refreshTask = Runnable { refreshNow() }
     private val restoreTask = Runnable {
         if (getText().isEmpty()) {
-            setText(defaultCode)
+            setText(defaultCode, true)
             onContentChanged?.invoke()
         }
     }
@@ -167,21 +192,30 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
         hintBar.visibility = View.GONE
         addView(hintBar, LayoutParams(-1, context.dp(40)))
 
-        // ---- symbol panel
-        symbolRow.orientation = HORIZONTAL
+        // ---- symbol panel: two rows. Row 1 holds what C code needs most often, so it is reachable without
+        // scrolling; row 2 holds the rest. The whole panel scrolls sideways as one block.
+        symbolRow.orientation = VERTICAL
         symbolBar.addView(symbolRow)
         symbolBar.isHorizontalScrollBarEnabled = false
-        val symbols = listOf("Tab", "{", "}", "(", ")", "[", "]", ";", ",", "&", "|", "*", "+", "-", "=", "<", ">", "!", "\"", "'", "#", "/", "%")
-        for (s in symbols) {
-            val b = TextView(context)
-            b.text = s
-            b.gravity = Gravity.CENTER
-            b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-            b.typeface = Typeface.MONOSPACE
-            b.minWidth = context.dp(40)
-            b.setPadding(context.dp(8), 0, context.dp(8), 0)
-            b.setOnClickListener { insert(if (s == "Tab") "    " else s) }
-            symbolRow.addView(b, LayoutParams(-2, context.dp(40)).apply { setMargins(context.dp(2), context.dp(2), context.dp(2), context.dp(2)) })
+        val symbolRows = listOf(
+            listOf(";", "(", ")", "{", "}", ",", "\"", "=", "%", "&", "*", "Tab"),
+            listOf("[", "]", "<", ">", "+", "-", "!", "/", "'", "#", "|")
+        )
+        for (symbols in symbolRows) {
+            val line = LinearLayout(context)
+            line.orientation = HORIZONTAL
+            for (sym in symbols) {
+                val b = TextView(context)
+                b.text = sym
+                b.gravity = Gravity.CENTER
+                b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                b.typeface = Typeface.MONOSPACE
+                b.minWidth = context.dp(44)
+                b.setPadding(context.dp(6), 0, context.dp(6), 0)
+                b.setOnClickListener { insert(if (sym == "Tab") "    " else sym) }
+                line.addView(b, LayoutParams(-2, context.dp(38)).apply { setMargins(context.dp(2), context.dp(2), context.dp(2), context.dp(2)) })
+            }
+            symbolRow.addView(line, LayoutParams(-2, -2))
         }
         addView(symbolBar, LayoutParams(-1, -2))
 
@@ -216,13 +250,7 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
             }
         })
         edit.setOnFocusChangeListener { _, has ->
-            if (!has && getText().isEmpty()) { setText(defaultCode); onContentChanged?.invoke() }
-        }
-        edit.setOnTouchListener { _, ev ->
-            val consumed = zoom.onTouch(ev)
-            if (consumed) parent?.requestDisallowInterceptTouchEvent(true)
-            if (ev.actionMasked == MotionEvent.ACTION_UP) performClick()
-            consumed
+            if (!has && getText().isEmpty()) { setText(defaultCode, true); onContentChanged?.invoke() }
         }
 
         applySettings()
@@ -290,10 +318,13 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
         for (i in 0 until toolbar.childCount) (toolbar.getChildAt(i) as? TextView)?.setTextColor(p.text)
         hintBar.setBackgroundColor(bar)
         symbolBar.setBackgroundColor(bar)
-        for (i in 0 until symbolRow.childCount) {
-            val b = symbolRow.getChildAt(i) as TextView
-            b.setTextColor(p.text)
-            b.background = roundedBg(ColorUtils.setAlphaComponent(p.accent, 50), context.dp(6).toFloat())
+        for (r in 0 until symbolRow.childCount) {
+            val line = symbolRow.getChildAt(r) as LinearLayout
+            for (i in 0 until line.childCount) {
+                val b = line.getChildAt(i) as TextView
+                b.setTextColor(p.text)
+                b.background = roundedBg(ColorUtils.setAlphaComponent(p.accent, 50), context.dp(6).toFloat())
+            }
         }
         statusBar.setBackgroundColor(bar)
         statusLeft.setTextColor(p.gutter)
@@ -308,25 +339,25 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
 
     fun getText(): String = edit.text?.toString() ?: ""
 
-    fun setText(t: String) {
+    fun setText(t: String, cursorAtEnd: Boolean = false) {
         clearErrorLines()
         loading = true
         edit.setText(t)
         undoMgr.reset(t)
         loading = false
-        edit.setSelection(0)
+        edit.setSelection(if (cursorAtEnd) t.length else 0)
         scheduleRefresh()
     }
 
     fun ensureNotEmpty() {
         if (getText().isBlank()) {
-            setText(defaultCode)
+            setText(defaultCode, true)
             onContentChanged?.invoke()
         }
     }
 
     fun clearToDefault() {
-        setText(defaultCode)
+        setText(defaultCode, true)
         onContentChanged?.invoke()
     }
 
@@ -336,6 +367,10 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
         val b = maxOf(edit.selectionStart, edit.selectionEnd).coerceAtLeast(0)
         e.replace(a, b, s)
         edit.setSelection((a + s.length - back).coerceIn(0, e.length))
+    }
+
+    fun moveCursorToEnd() {
+        edit.setSelection(edit.text?.length ?: 0)
     }
 
     fun selectAll() { edit.requestFocus(); edit.selectAll() }

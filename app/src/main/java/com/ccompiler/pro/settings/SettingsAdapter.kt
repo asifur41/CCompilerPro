@@ -7,11 +7,13 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.graphics.ColorUtils
 import androidx.recyclerview.widget.RecyclerView
+import com.ccompiler.pro.R
 import com.ccompiler.pro.utils.Prefs
 import com.ccompiler.pro.utils.dp
 import com.ccompiler.pro.utils.selectableBg
@@ -125,7 +127,10 @@ class SettingsAdapter(
                 col.addView(label(item.title, 16f, palette.text))
                 item.subtitle?.let { s -> col.addView(label(s, 12f, sub())) }
                 row.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
-                row.addView(label("→", 18f, palette.accent))
+                val chevron = ImageView(ctx)
+                chevron.setImageResource(R.drawable.ic_chevron_right)
+                chevron.setColorFilter(palette.accent)
+                row.addView(chevron, LinearLayout.LayoutParams(ctx.dp(24), ctx.dp(24)))
                 box.addView(row)
             }
         }

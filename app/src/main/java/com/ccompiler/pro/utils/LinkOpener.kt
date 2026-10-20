@@ -14,6 +14,9 @@ object LinkOpener {
     const val DONATE = "https://asifur-dev.blogspot.com/p/donate.html?m=1"
     const val EMAIL = "asifur2580@gmail.com"
     const val RELEASES = "https://github.com/asifur41/CCompilerPro/releases/latest"
+    const val APK_DOWNLOAD = "https://github.com/asifur41/CCompilerPro/releases/latest/download/CCompilerPro.apk"
+    const val COMMUNITY = "https://chat.whatsapp.com/HppYe1eQq6nChFWtaJdadc"
+    const val REVIEW = "https://asifur-dev.blogspot.com/2026/10/project-1.html?m=1"
 
     /** Opens a URL in the system browser. Needs no INTERNET permission: the browser does the networking. */
     fun openLink(context: Context, url: String) {

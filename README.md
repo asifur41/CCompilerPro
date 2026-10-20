@@ -39,7 +39,7 @@ The compiler is [TinyCC](https://repo.or.cz/tinycc.git) (LGPL), cross-compiled f
 3. Push to `main`. The workflow *Build CCompiler Pro APK* builds TinyCC, builds and signs the release APK, writes the trust report and uploads the artifact `ccompiler-pro-release`.
 
 ## Releases and updates
-* **Users:** *Settings → Check for updates* opens the latest release page on GitHub in the browser; download the APK there and install it over the old version. The app itself never touches the network, so it cannot tell you whether a newer version exists – compare the installed version (shown in that row and in *About*) with the release page.
+* **Users:** *Settings → Visit GitHub releases* opens the latest release page on GitHub in the browser and *Settings → Download the latest APK* downloads the newest APK directly; install it over the old version. The app itself never touches the network, so it cannot tell you whether a newer version exists – compare the installed version (shown in that row and in *About*) with the release page.
 * **Publisher:** raise `versionCode` and `versionName` in `app/build.gradle.kts`, commit, then create a tag that matches the version: `git tag v1.1.2 && git push origin v1.1.2`. The workflow builds, signs, runs the trust checks and publishes a GitHub Release with the APK, checksum, trust report and certificate fingerprint. Android only accepts an update that is signed with the **same key** and has a higher `versionCode`.
 
 ## Third-party components

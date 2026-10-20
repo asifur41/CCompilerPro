@@ -12,14 +12,13 @@
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <TextView
+        <ImageButton
             android:id="@+id/settings_back"
             android:layout_width="52dp"
             android:layout_height="match_parent"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:gravity="center"
-            android:text="←"
-            android:textSize="22sp" />
+            android:contentDescription="Back"
+            android:src="@drawable/ic_arrow_back" />
 
         <TextView
             android:id="@+id/settings_heading"

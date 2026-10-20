@@ -6,6 +6,7 @@
     <string name="menu_samples">Sample Programs</string>
     <string name="menu_save">Save</string>
     <string name="menu_save_as">Save As</string>
+    <string name="menu_rename">Rename Current File</string>
     <string name="menu_export">Export File</string>
     <string name="menu_share">Share Code...</string>
     <string name="menu_settings">Settings ▸</string>

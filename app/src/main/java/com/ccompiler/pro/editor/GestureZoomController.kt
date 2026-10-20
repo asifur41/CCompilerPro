@@ -5,8 +5,10 @@ import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 
 /**
- * Two-finger pinch zoom. Text size is clamped to 12..28 sp (shown as a percentage of the 14 sp
- * baseline, i.e. ~86%..200%). The change is smoothed while pinching and persisted when it ends.
+ * Two-finger pinch zoom. Text size is clamped to 12..28 sp (shown as a percentage of the 14 sp baseline).
+ * While pinching, the size follows the distance between the fingers directly:
+ *     size = size at the start x (distance now / distance at the start)
+ * and snaps to whole sp, so what you see while pinching is exactly what gets saved when you let go.
  */
 class GestureZoomController(
     ctx: Context,
@@ -20,29 +22,36 @@ class GestureZoomController(
     }
 
     var enabled = true
-    private var smoothed = 14f
+    private var startSize = BASE_SP
+    private var startSpan = 1f
+    private var applied = BASE_SP
 
     private val detector = ScaleGestureDetector(ctx, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScaleBegin(d: ScaleGestureDetector): Boolean {
-            smoothed = getSize()
-            return enabled
+            if (!enabled) return false
+            startSize = getSize()
+            startSpan = d.currentSpan.coerceAtLeast(1f)
+            applied = startSize
+            return true
         }
 
         override fun onScale(d: ScaleGestureDetector): Boolean {
             if (!enabled) return false
-            val target = (smoothed * d.scaleFactor).coerceIn(MIN_SP, MAX_SP)
-            smoothed += (target - smoothed) * 0.6f
-            onSize(smoothed, false)
+            val wanted = Math.round(startSize * d.currentSpan / startSpan).toFloat().coerceIn(MIN_SP, MAX_SP)
+            if (wanted != applied) {          // only re-layout the text when the size really changes
+                applied = wanted
+                onSize(wanted, false)
+            }
             return true
         }
 
         override fun onScaleEnd(d: ScaleGestureDetector) {
-            onSize(smoothed.coerceIn(MIN_SP, MAX_SP), true)
+            onSize(applied.coerceIn(MIN_SP, MAX_SP), true)
         }
     })
 
-    /** Feed every touch event; returns true while a pinch is in progress. */
-    fun onTouch(ev: MotionEvent): Boolean {
+    /** Feed every touch event of the editor area. Returns true while a pinch is in progress. */
+    fun observe(ev: MotionEvent): Boolean {
         if (!enabled) return false
         detector.onTouchEvent(ev)
         return detector.isInProgress

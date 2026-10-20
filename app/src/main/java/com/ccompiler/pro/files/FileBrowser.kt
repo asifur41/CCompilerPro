@@ -3,6 +3,7 @@ package com.ccompiler.pro.files
 import android.app.Activity
 import android.text.InputType
 import android.view.View
+import android.view.WindowManager
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -33,6 +34,50 @@ object FileBrowser {
             .setNegativeButton("Cancel", null)
             .setPositiveButton("OK") { _, _ -> onOk(et.text.toString()) }
             .show()
+    }
+
+    /**
+     * Asks for a file name. ".c" is added when no .c/.h extension was typed. [check] gets the final name and
+     * returns an error text (the dialog stays open and shows it) or null when the name is fine.
+     */
+    fun promptFileName(
+        activity: Activity, title: String, initialName: String, positive: String,
+        check: (String) -> String?, onOk: (String) -> Unit
+    ) {
+        val et = EditText(activity).apply {
+            setText(initialName)
+            setSelection(0, initialName.substringBeforeLast('.').length)
+            hint = "File name, for example main.c"
+            inputType = InputType.TYPE_CLASS_TEXT
+            setSingleLine()
+            importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+        }
+        val box = LinearLayout(activity).apply {
+            setPadding(activity.dp(24), activity.dp(8), activity.dp(24), 0)
+            addView(et, LinearLayout.LayoutParams(-1, -2))
+        }
+        val dlg = MaterialAlertDialogBuilder(activity).setTitle(title).setView(box)
+            .setNegativeButton("Cancel", null).setPositiveButton(positive, null).create()
+        dlg.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
+        dlg.setOnShowListener {
+            et.requestFocus()
+            dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val clean = StorageHelper.sanitizeName(et.text.toString())
+                if (clean == null) {
+                    et.error = "Enter a file name"
+                    return@setOnClickListener
+                }
+                val name = StorageHelper.ensureCExtension(clean)
+                val problem = check(name)
+                if (problem != null) {
+                    et.error = problem
+                    return@setOnClickListener
+                }
+                dlg.dismiss()
+                onOk(name)
+            }
+        }
+        dlg.show()
     }
 
     fun showOpenDialog(
