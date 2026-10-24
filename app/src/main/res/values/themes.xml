@@ -4,4 +4,11 @@
         <item name="colorPrimary">#6200DD</item>
         <item name="colorSecondary">#BB86FC</item>
     </style>
+
+    <!-- Shown while the app starts: your logo on the logo background colour, then the normal theme takes over. -->
+    <style name="Theme.CCompiler.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/ic_launcher_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>
+        <item name="postSplashScreenTheme">@style/Theme.CCompiler</item>
+    </style>
 </resources>

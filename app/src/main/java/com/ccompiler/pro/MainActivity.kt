@@ -18,6 +18,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.graphics.ColorUtils
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowInsetsControllerCompat
 import com.ccompiler.pro.compiler.CodeSanitizer
 import com.ccompiler.pro.compiler.CompilationResult
@@ -101,6 +102,7 @@ class MainActivity : AppCompatActivity() {
     // ------------------------------------------------------------------ lifecycle
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()          // must come before super.onCreate
         CrashLog.install(this)
         ThemeManager.applyNightMode(this)
         super.onCreate(savedInstanceState)

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Checks that the files in this repository are exactly the files that were reviewed for version 1.2.0.
+# Checks that the files in this repository are exactly the files that were reviewed for version 2.5.4.
 # Run from anywhere:  bash scripts/verify_repo.sh
 cd "$(dirname "$0")/.." || exit 1
 LIST=scripts/expected-hashes.txt

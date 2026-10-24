@@ -1,5 +1,7 @@
 # CCompiler Pro
 
+<img src="docs/logo.png" width="96" alt="CCompiler Pro logo">
+
 An offline C editor and compiler for Android. Write C, tap **Run**, see the output – no internet, no account, no ads.
 
 * **Package:** `com.ccompiler.pro` &nbsp;|&nbsp; **Developer:** Md Asifur Rahman (Bangladesh)

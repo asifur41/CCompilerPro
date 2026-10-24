@@ -11,8 +11,8 @@ android {
         applicationId = "com.ccompiler.pro"
         minSdk = 26
         targetSdk = 34
-        versionCode = 6
-        versionName = "1.2.0"
+        versionCode = 20504
+        versionName = "2.5.4"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -66,5 +66,6 @@ dependencies {
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.viewpager2:viewpager2:1.0.0")
+    implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 }
