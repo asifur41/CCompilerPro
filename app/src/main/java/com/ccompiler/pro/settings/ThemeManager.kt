@@ -39,9 +39,16 @@ object ThemeManager {
             c("#A8E6A1"), c("#FFB38A"), c("#FFA8D8"), c("#8A5757"), false)
     )
 
+    /** Classic Monokai colours (the free original scheme by Wimer Hazenberg, not the paid "Monokai Pro"). */
+    private val monokai = Palette(
+        "Monokai", c("#1E1F1C"), c("#F8F8F2"), c("#272822"), c("#A6E22E"), c("#F92672"), c("#E6DB74"), c("#75715E"),
+        c("#AE81FF"), c("#66D9EF"), c("#A6E22E"), c("#90908A"), false
+    )
+
     fun index(ctx: Context): Int = Prefs.int(ctx, Prefs.THEME, 0).coerceIn(0, palettes.size - 1)
 
-    fun palette(ctx: Context): Palette = palettes[index(ctx)]
+    /** While the Monokai switch is on it overrides the chosen theme; the chosen theme itself is never changed. */
+    fun palette(ctx: Context): Palette = if (Prefs.bool(ctx, Prefs.MONOKAI, false)) monokai else palettes[index(ctx)]
 
     /** Day = light system mode, everything else = dark, so dialogs and widgets match. */
     fun applyNightMode(ctx: Context) {

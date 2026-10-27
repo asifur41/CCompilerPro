@@ -19,6 +19,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.graphics.ColorUtils
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ImageSpan
+import android.util.TypedValue
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.DrawableCompat
+import com.ccompiler.pro.editor.UndoRedoManager
 import androidx.core.view.WindowInsetsControllerCompat
 import com.ccompiler.pro.compiler.CodeSanitizer
 import com.ccompiler.pro.compiler.CompilationResult
@@ -89,6 +96,19 @@ class MainActivity : AppCompatActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private val autosaveTask = Runnable { doAutoSave() }
 
+    // ---- open documents (tabs). The ACTIVE one lives in currentFile / untitledName / savedText and the editor;
+    // the list below is only used when "Open several files" is switched on in Settings.
+    private class Doc(
+        var file: File?, var untitled: String, var savedText: String, var text: String,
+        var selection: Int = 0, var history: UndoRedoManager.State? = null
+    ) {
+        val modified: Boolean get() = text != savedText
+    }
+
+    private val docs = ArrayList<Doc>()
+    private var activeDoc = 0
+    private val maxTabs = 12
+
     private val importLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         if (r.resultCode == RESULT_OK) r.data?.data?.let { onImportPicked(it) }
     }
@@ -134,12 +154,16 @@ class MainActivity : AppCompatActivity() {
         output.onSend = { executor.sendInput(it) }
         output.onEof = { executor.closeInput() }
         output.onLineClick = { jumpToLine(it) }
+        editor.onTabSelected = { switchTab(it) }
+        editor.onTabClosed = { closeTab(it) }
+        editor.onTabNew = { promptNewFile() }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() = onBack()
         })
         root.viewTreeObserver.addOnGlobalLayoutListener { checkKeyboard() }
 
         restoreState(savedInstanceState)
+        restoreTabs()
         applyAll()
         updateTitle()
 
@@ -158,6 +182,7 @@ class MainActivity : AppCompatActivity() {
         super.onPause()
         handler.removeCallbacks(autosaveTask)
         if (Prefs.bool(this, Prefs.AUTOSAVE, true)) doAutoSave(showIndicator = false)
+        persistTabs()
     }
 
     override fun onDestroy() {
@@ -232,6 +257,8 @@ class MainActivity : AppCompatActivity() {
         pane?.applyTheme(p)
         updateRunButton()
         scheduleAutosave()
+        collapseTabsIfOff()
+        refreshTabs()
     }
 
     private fun applyLayoutMode() {
@@ -263,7 +290,8 @@ class MainActivity : AppCompatActivity() {
     private fun isModified() = editor.getText() != savedText
 
     private fun updateTitle() {
-        tvTitle.text = (if (isModified()) "● " else "") + (currentFile?.name ?: untitledName)
+        tvTitle.text = (if (isModified()) "• " else "") + (currentFile?.name ?: untitledName)
+        refreshTabs()
     }
 
     private fun updateRunButton() {
@@ -283,9 +311,193 @@ class MainActivity : AppCompatActivity() {
         if (isModified()) WarningDialog.discardChanges(this) { block() } else block()
     }
 
+    /** Replacing the open file needs a warning; opening in a new tab does not. */
+    private fun replaceGuard(block: () -> Unit) {
+        if (tabsOn()) block() else confirmDiscardThen(block)
+    }
+
+    /** "Settings" with a small gear drawn after the word (a text symbol would be drawn wrongly on some phones). */
+    private fun withIcon(text: String, resId: Int): CharSequence {
+        val d = ContextCompat.getDrawable(this, resId)?.mutate() ?: return text
+        val tv = TypedValue()
+        theme.resolveAttribute(android.R.attr.textColorPrimary, tv, true)
+        val color = if (tv.resourceId != 0) {
+            ContextCompat.getColorStateList(this, tv.resourceId)?.defaultColor ?: 0xFFFFFFFF.toInt()
+        } else {
+            tv.data
+        }
+        DrawableCompat.setTint(d, color)
+        val size = dp(18)
+        d.setBounds(0, 0, size, size)
+        val s = SpannableString("$text  ")
+        s.setSpan(ImageSpan(d, ImageSpan.ALIGN_BOTTOM), s.length - 1, s.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        return s
+    }
+
+    // ------------------------------------------------------------------ tabs (Settings > Editor > "Open several files")
+
+    private fun tabsOn(): Boolean = Prefs.bool(this, Prefs.TABS, false)
+
+    private fun snapshotActive() =
+        Doc(currentFile, untitledName, savedText, editor.getText(), editor.selectionStart(), editor.exportHistory())
+
+    private fun ensureDocs() {
+        if (docs.isEmpty()) {
+            docs.add(snapshotActive())
+            activeDoc = 0
+        }
+    }
+
+    private fun storeActive() {
+        ensureDocs()
+        if (activeDoc !in docs.indices) activeDoc = 0
+        docs[activeDoc] = snapshotActive()
+    }
+
+    private fun showDoc(index: Int) {
+        val d = docs[index]
+        activeDoc = index
+        setCurrent(d.file)
+        untitledName = d.untitled
+        savedText = d.savedText
+        editor.restoreDocument(d.text, d.selection, d.history)
+        updateTitle()
+    }
+
+    /** Leaves the active file: its edits stay in memory and, for a real file with auto-save on, are written to disk. */
+    private fun leaveActive() {
+        storeActive()
+        val d = docs[activeDoc]
+        val f = d.file
+        if (f != null && d.modified && Prefs.bool(this, Prefs.AUTOSAVE, true)) {
+            try {
+                FileManager.write(f, d.text)
+                d.savedText = d.text
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun switchTab(index: Int) {
+        ensureDocs()
+        if (index == activeDoc || index !in docs.indices) return
+        leaveActive()
+        showDoc(index)
+    }
+
+    private fun openInNewTab(file: File?, name: String, text: String) {
+        ensureDocs()
+        if (docs.size >= maxTabs) {
+            NotificationHelper.toast(this, "Close a tab first (up to $maxTabs files can be open)")
+            return
+        }
+        leaveActive()
+        docs.add(Doc(file, name, text, text))
+        showDoc(docs.lastIndex)
+    }
+
+    private fun openFileInTab(f: File) {
+        ensureDocs()
+        val existing = docs.indices.firstOrNull { i ->
+            (if (i == activeDoc) currentFile else docs[i].file)?.absolutePath == f.absolutePath
+        }
+        if (existing != null) {
+            switchTab(existing)
+            return
+        }
+        try {
+            openInNewTab(f, f.name, FileManager.read(f))
+        } catch (e: Exception) {
+            NotificationHelper.toast(this, "Could not open ${f.name}")
+        }
+    }
+
+    private fun closeTab(index: Int) {
+        ensureDocs()
+        if (index !in docs.indices) return
+        if (index == activeDoc) storeActive()
+        val d = docs[index]
+        val close = {
+            docs.removeAt(index)
+            when {
+                docs.isEmpty() -> {
+                    docs.add(Doc(null, "untitled.c", editor.defaultCode, editor.defaultCode))
+                    showDoc(0)
+                }
+                index == activeDoc -> showDoc(minOf(index, docs.lastIndex))
+                else -> {
+                    if (index < activeDoc) activeDoc--
+                    refreshTabs()
+                }
+            }
+        }
+        if (d.modified) WarningDialog.discardChanges(this) { close() } else close()
+    }
+
+    private fun refreshTabs() {
+        if (!tabsOn()) {
+            editor.hideTabs()
+            return
+        }
+        ensureDocs()
+        val titles = docs.indices.map { i ->
+            val mod = if (i == activeDoc) isModified() else docs[i].modified
+            val name = if (i == activeDoc) (currentFile?.name ?: untitledName) else (docs[i].file?.name ?: docs[i].untitled)
+            (if (mod) "• " else "") + name
+        }
+        editor.showTabs(titles, activeDoc)
+    }
+
+    private fun anyModified(): Boolean =
+        isModified() || (tabsOn() && docs.indices.any { it != activeDoc && docs[it].modified })
+
+    /** Remember which files are open, so the tabs come back after the app was closed. */
+    private fun persistTabs() {
+        if (!tabsOn() || docs.size < 2) {
+            Prefs.remove(this, Prefs.OPEN_TABS)
+            return
+        }
+        storeActive()
+        Prefs.put(this, Prefs.OPEN_TABS, docs.mapNotNull { it.file?.absolutePath }.joinToString("|"))
+    }
+
+    private fun restoreTabs() {
+        if (!tabsOn()) return
+        ensureDocs()
+        val saved = Prefs.str(this, Prefs.OPEN_TABS, "")
+        if (saved.isEmpty()) return
+        val have = docs.mapNotNull { it.file?.absolutePath }.toMutableSet()
+        for (path in saved.split("|")) {
+            if (path.isEmpty() || path in have || docs.size >= maxTabs) continue
+            val f = File(path)
+            if (!f.exists()) continue
+            try {
+                val t = FileManager.read(f)
+                docs.add(Doc(f, f.name, t, t))
+                have.add(path)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    /** Tabs were switched off in Settings: only the file on screen stays (edited files are saved first). */
+    private fun collapseTabsIfOff() {
+        if (tabsOn()) return
+        if (docs.size > 1) {
+            storeActive()
+            for ((i, d) in docs.withIndex()) {
+                val f = d.file
+                if (i != activeDoc && f != null && d.modified && Prefs.bool(this, Prefs.AUTOSAVE, true)) {
+                    try { FileManager.write(f, d.text) } catch (_: Exception) {}
+                }
+            }
+        }
+        docs.clear()
+    }
+
     private fun onBack() {
         if (pane?.handleBack() == true) return
-        if (isModified()) WarningDialog.exitWithoutSave(this) { finish() } else finish()
+        if (anyModified()) WarningDialog.exitWithoutSave(this) { finish() } else finish()
     }
 
     // ------------------------------------------------------------------ auto-save
@@ -325,9 +537,10 @@ class MainActivity : AppCompatActivity() {
     private fun showMenu(anchor: android.view.View) {
         val pm = PopupMenu(this, anchor)
         menuInflater.inflate(R.menu.main_menu, pm.menu)
+        pm.menu.findItem(R.id.menu_settings)?.title = withIcon("Settings", R.drawable.ic_settings)
         pm.setOnMenuItemClickListener { item ->
             when (item.itemId) {
-                R.id.menu_new -> confirmDiscardThen { promptNewFile() }
+                R.id.menu_new -> replaceGuard { promptNewFile() }
                 R.id.menu_open -> openFileDialog()
                 R.id.menu_samples -> samplesDialog()
                 R.id.menu_save -> save()
@@ -431,6 +644,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadFile(f: File) {
+        if (tabsOn()) { openFileInTab(f); return }
         try {
             val t = FileManager.read(f)
             editor.setText(t)
@@ -446,14 +660,24 @@ class MainActivity : AppCompatActivity() {
     private fun openFileDialog() {
         FileBrowser.showOpenDialog(
             this,
-            onOpen = { f -> confirmDiscardThen { loadFile(f) } },
+            onOpen = { f -> replaceGuard { loadFile(f) } },
             onImport = { pickImport() },
             onChanged = { old, new -> onFileChanged(old, new) }
         )
     }
 
     private fun onFileChanged(old: File, new: File?) {
-        val cur = currentFile?.absolutePath ?: return
+        val o0 = old.absolutePath
+        for (i in docs.indices) {            // other open tabs
+            if (i == activeDoc) continue
+            val d = docs[i]
+            val p0 = d.file?.absolutePath ?: continue
+            if (p0 == o0 || p0.startsWith(o0 + File.separator)) {
+                if (new == null) { d.untitled = File(p0).name; d.file = null; d.savedText = "" }
+                else d.file = File(new.absolutePath + p0.removePrefix(o0))
+            }
+        }
+        val cur = currentFile?.absolutePath ?: run { refreshTabs(); return }
         val o = old.absolutePath
         if (cur == o || cur.startsWith(o + File.separator)) {
             if (new == null) {
@@ -513,7 +737,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         NotificationHelper.toast(this, "Imported ${f.name}")
-        confirmDiscardThen { loadFile(f) }
+        replaceGuard { loadFile(f) }
     }
 
     private fun exportFile() {
@@ -534,15 +758,19 @@ class MainActivity : AppCompatActivity() {
         MaterialAlertDialogBuilder(this)
             .setTitle("Sample Programs")
             .setItems(names.toTypedArray()) { _, which ->
-                confirmDiscardThen {
+                replaceGuard {
                     val t = ImportExportHandler.readSample(this, names[which])
-                    editor.setText(t)
-                    savedText = t
-                    untitledName = names[which]
-                    setCurrent(null)
-                    StorageHelper.draftFile(this).delete()
-                    output.clear()
-                    updateTitle()
+                    if (tabsOn()) {
+                        openInNewTab(null, names[which], t)
+                    } else {
+                        editor.setText(t)
+                        savedText = t
+                        untitledName = names[which]
+                        setCurrent(null)
+                        StorageHelper.draftFile(this).delete()
+                        output.clear()
+                        updateTitle()
+                    }
                 }
             }
             .setNegativeButton("Cancel", null)

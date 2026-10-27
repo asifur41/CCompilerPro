@@ -12,7 +12,10 @@
         android:id="@+id/warn_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="⚠ Warning"
+        android:drawablePadding="10dp"
+        android:drawableStart="@drawable/ic_warning"
+        android:drawableTint="#FFB300"
+        android:text="Warning"
         android:textSize="20sp"
         android:textStyle="bold" />
 

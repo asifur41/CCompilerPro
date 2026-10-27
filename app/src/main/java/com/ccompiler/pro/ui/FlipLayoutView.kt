@@ -131,5 +131,6 @@ class FlipLayoutView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet
         btnBack.compoundDrawableTintList = ColorStateList.valueOf(p.text)
         title.setTextColor(p.text)
         btnCopy.setTextColor(p.text)
+        btnCopy.compoundDrawableTintList = ColorStateList.valueOf(p.text)
     }
 }

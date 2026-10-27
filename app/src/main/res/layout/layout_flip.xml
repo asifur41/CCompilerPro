@@ -51,7 +51,9 @@
                 android:gravity="center"
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp"
-                android:text="⧉ Copy"
+                android:drawablePadding="6dp"
+                android:drawableStart="@drawable/ic_copy_small"
+                android:text="Copy"
                 android:textSize="15sp" />
         </LinearLayout>
 

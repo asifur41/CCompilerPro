@@ -8,6 +8,9 @@
 * **Your code stays on your phone.** Programs are compiled and run locally by a bundled C compiler (TinyCC) running as a child process of the app.
 * **Actions you start yourself:** "Visit Developer Website", "Donate", "Join Community" (WhatsApp), "Download the latest APK", "Visit GitHub releases" and "Leave a review" open your browser or WhatsApp; "Report a Bug" opens your email app with a draft containing Android version, device model and app version (you can edit or cancel it); "Share Code" opens Android's share sheet.
 * **Auto-save** writes only to the app's private storage.
+* **Learned symbol order** (which symbol buttons you tap most) is stored only on the phone.
+* **Backups** are created only when you choose "Back up all projects", and you choose where the file is saved.
+* **"Delete all app data"** erases everything the app stores, after a 2-minute countdown that you can cancel.
 * **If the app crashes,** a short technical log (error text with class names and line numbers, never your code or files) is saved on the phone only. It is attached to a bug-report email only if you decide to send one.
 
 ## Verify it yourself

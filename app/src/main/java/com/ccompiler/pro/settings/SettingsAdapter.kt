@@ -14,8 +14,10 @@ import androidx.appcompat.widget.SwitchCompat
 import androidx.core.graphics.ColorUtils
 import androidx.recyclerview.widget.RecyclerView
 import com.ccompiler.pro.R
+import com.ccompiler.pro.utils.NotificationHelper
 import com.ccompiler.pro.utils.Prefs
 import com.ccompiler.pro.utils.dp
+import com.ccompiler.pro.utils.roundedBg
 import com.ccompiler.pro.utils.selectableBg
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.button.MaterialButtonToggleGroup
@@ -25,10 +27,19 @@ import com.google.android.material.slider.Slider
 sealed class SettingItem {
     data class Header(val title: String) : SettingItem()
     data class Toggle(val key: String, val title: String, val default: Boolean, val subtitle: String? = null) : SettingItem()
-    data class Choice(val key: String, val title: String, val options: List<String>, val default: Int, val dropdown: Boolean = false) : SettingItem()
+    data class Choice(
+        val key: String, val title: String, val options: List<String>, val default: Int, val dropdown: Boolean = false,
+        val lockedKey: String? = null, val lockedLabel: String = ""
+    ) : SettingItem()
     data class SliderRow(val key: String, val title: String, val min: Float, val max: Float, val default: Float) : SettingItem()
     data class Info(val title: String, val value: String) : SettingItem()
-    data class Action(val title: String, val subtitle: String?, val onClick: () -> Unit) : SettingItem()
+    data class Action(val title: String, val subtitle: String?, val warning: Boolean = false, val onClick: () -> Unit) : SettingItem()
+
+    /** A drop-down section. The first [previewCount] children are always visible; tapping the header shows all. */
+    data class Group(val key: String, val title: String, val children: List<SettingItem>, val previewCount: Int = 2) : SettingItem()
+
+    /** Internal: the header row of a [Group]. */
+    data class GroupHeader(val group: Group, val open: Boolean) : SettingItem()
 }
 
 class SettingsAdapter(
@@ -40,6 +51,42 @@ class SettingsAdapter(
 
     class VH(val box: LinearLayout) : RecyclerView.ViewHolder(box)
 
+    private val expanded = HashSet<String>(Prefs.str(ctx, Prefs.SETTINGS_OPEN, "").split(",").filter { it.isNotEmpty() })
+    private var rows: List<SettingItem> = emptyList()
+
+    init {
+        rebuild()
+    }
+
+    private fun rebuild() {
+        val out = ArrayList<SettingItem>()
+        for (item in items) {
+            if (item is SettingItem.Group) {
+                val open = item.key in expanded
+                out.add(SettingItem.GroupHeader(item, open))
+                out.addAll(if (open) item.children else item.children.take(item.previewCount))
+            } else {
+                out.add(item)
+            }
+        }
+        rows = out
+    }
+
+    private fun toggleGroup(g: SettingItem.Group, headerPos: Int) {
+        if (headerPos == RecyclerView.NO_POSITION) return
+        val nowOpen = expanded.add(g.key)
+        if (!nowOpen) expanded.remove(g.key)
+        Prefs.put(ctx, Prefs.SETTINGS_OPEN, expanded.joinToString(","))
+        val shown = g.previewCount.coerceAtMost(g.children.size)
+        val extra = g.children.size - shown
+        rebuild()
+        notifyItemChanged(headerPos)
+        if (extra > 0) {
+            if (nowOpen) notifyItemRangeInserted(headerPos + 1 + shown, extra)
+            else notifyItemRangeRemoved(headerPos + 1 + shown, extra)
+        }
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val box = LinearLayout(ctx)
         box.orientation = LinearLayout.VERTICAL
@@ -47,7 +94,7 @@ class SettingsAdapter(
         return VH(box)
     }
 
-    override fun getItemCount() = items.size
+    override fun getItemCount() = rows.size
 
     private fun label(text: String, sizeSp: Float, color: Int, bold: Boolean = false) = TextView(ctx).apply {
         this.text = text
@@ -58,17 +105,26 @@ class SettingsAdapter(
 
     private fun sub(color: Int = palette.text) = ColorUtils.setAlphaComponent(color, 160)
 
+    private fun icon(res: Int, tint: Int, sizeDp: Int) = ImageView(ctx).apply {
+        setImageResource(res)
+        setColorFilter(tint)
+        layoutParams = LinearLayout.LayoutParams(ctx.dp(sizeDp), ctx.dp(sizeDp))
+    }
+
     override fun onBindViewHolder(h: VH, position: Int) {
         val box = h.box
         box.removeAllViews()
         box.background = null
         box.setOnClickListener(null)
         box.isClickable = false
+        (box.layoutParams as RecyclerView.LayoutParams).setMargins(0, 0, 0, 0)
         val hp = ctx.dp(20)
         val vp = ctx.dp(12)
         box.setPadding(hp, vp, hp, vp)
 
-        when (val item = items[position]) {
+        when (val item = rows[position]) {
+            is SettingItem.Group -> {}   // never shown directly: its header and rows are flattened into the list
+            is SettingItem.GroupHeader -> bindGroupHeader(h, item)
             is SettingItem.Header -> {
                 box.setPadding(hp, ctx.dp(22), hp, ctx.dp(4))
                 box.addView(label(item.title.uppercase(), 12f, palette.accent, true))
@@ -123,17 +179,41 @@ class SettingsAdapter(
                 box.isClickable = true
                 box.setOnClickListener { item.onClick() }
                 val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                if (item.warning) {
+                    val w = icon(R.drawable.ic_warning, 0xFFFFB300.toInt(), 24)
+                    (w.layoutParams as LinearLayout.LayoutParams).marginEnd = ctx.dp(12)
+                    row.addView(w)
+                }
                 val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
-                col.addView(label(item.title, 16f, palette.text))
+                val titleColor = if (item.warning) (if (palette.isLight) 0xFFC62828.toInt() else 0xFFFF7B7B.toInt()) else palette.text
+                col.addView(label(item.title, 16f, titleColor, item.warning))
                 item.subtitle?.let { s -> col.addView(label(s, 12f, sub())) }
                 row.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
-                val chevron = ImageView(ctx)
-                chevron.setImageResource(R.drawable.ic_chevron_right)
-                chevron.setColorFilter(palette.accent)
-                row.addView(chevron, LinearLayout.LayoutParams(ctx.dp(24), ctx.dp(24)))
+                row.addView(icon(R.drawable.ic_chevron_right, palette.accent, 24))
                 box.addView(row)
             }
         }
+    }
+
+    private fun bindGroupHeader(h: VH, item: SettingItem.GroupHeader) {
+        val box = h.box
+        val g = item.group
+        (box.layoutParams as RecyclerView.LayoutParams).setMargins(ctx.dp(12), ctx.dp(14), ctx.dp(12), ctx.dp(2))
+        box.setPadding(ctx.dp(16), ctx.dp(12), ctx.dp(12), ctx.dp(12))
+        box.background = roundedBg(ColorUtils.blendARGB(palette.bg, palette.accent, 0.16f), ctx.dp(12).toFloat())
+        val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        col.addView(label(g.title, 17f, palette.text, true))
+        val more = g.children.size > g.previewCount
+        val hint = if (more && !item.open) "Tap to see all ${g.children.size} options" else "${g.children.size} options"
+        col.addView(label(hint, 12f, sub()))
+        row.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
+        if (more) {
+            row.addView(icon(if (item.open) R.drawable.ic_expand_less else R.drawable.ic_expand_more, palette.accent, 28))
+            box.isClickable = true
+            box.setOnClickListener { toggleGroup(g, h.bindingAdapterPosition) }
+        }
+        box.addView(row)
     }
 
     private fun bindChoice(box: LinearLayout, c: SettingItem.Choice) {
@@ -145,7 +225,7 @@ class SettingsAdapter(
             group.isSingleSelection = true
             group.isSelectionRequired = true
             val ids = ArrayList<Int>()
-            c.options.forEachIndexed { i, name ->
+            c.options.forEachIndexed { _, name ->
                 val b = MaterialButton(ctx, null, com.google.android.material.R.attr.materialButtonOutlinedStyle)
                 b.id = View.generateViewId()
                 b.text = name
@@ -159,20 +239,27 @@ class SettingsAdapter(
             }
             box.addView(group, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ctx.dp(6) })
         } else {
-            // dropdown-style row
+            // dropdown-style row (opens a list)
             box.background = ctx.selectableBg()
             box.isClickable = true
+            val locked = c.lockedKey != null && Prefs.bool(ctx, c.lockedKey, false)
             val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-            val value = label(c.options[current] + "  ▾", 15f, palette.accent, true)
+            val value = label(if (locked) c.lockedLabel else c.options[current], 15f, palette.accent, true)
             row.addView(label(c.title, 16f, palette.text), LinearLayout.LayoutParams(0, -2, 1f))
             row.addView(value)
+            val chev = icon(R.drawable.ic_expand_more, palette.accent, 22)
+            row.addView(chev)
             box.addView(row)
             box.setOnClickListener {
+                if (c.lockedKey != null && Prefs.bool(ctx, c.lockedKey, false)) {
+                    NotificationHelper.toast(ctx, "${c.lockedLabel}: turn it off to change this")
+                    return@setOnClickListener
+                }
                 val sel = Prefs.int(ctx, c.key, c.default).coerceIn(0, c.options.size - 1)
                 MaterialAlertDialogBuilder(ctx).setTitle(c.title)
                     .setSingleChoiceItems(c.options.toTypedArray(), sel) { d, which ->
                         Prefs.put(ctx, c.key, which)
-                        value.text = c.options[which] + "  ▾"
+                        value.text = c.options[which]
                         d.dismiss()
                         onChanged(c.key)
                     }.setNegativeButton("Cancel", null).show()

@@ -22,7 +22,7 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:gravity="center_vertical"
-            android:text="⋯  OUTPUT  (drag to resize)"
+            android:text="OUTPUT  ·  drag to resize"
             android:textSize="12sp"
             android:textStyle="bold" />
 
@@ -34,7 +34,9 @@
             android:gravity="center"
             android:paddingStart="12dp"
             android:paddingEnd="12dp"
-            android:text="⧉ Copy"
+            android:drawablePadding="6dp"
+            android:drawableStart="@drawable/ic_copy_small"
+            android:text="Copy"
             android:textSize="13sp" />
 
         <TextView

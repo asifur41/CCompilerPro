@@ -109,7 +109,7 @@ object FileBrowser {
             rows.add("🔍  Search in all folders…")
             val list = ArrayList<File?>()
             if (dir != root) {
-                rows.add("⬆  ..")
+                rows.add("..   (parent folder)")
                 list.add(null)
             }
             for (f in FileManager.list(dir)) {

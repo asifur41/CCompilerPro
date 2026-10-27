@@ -1,0 +1,22 @@
+CCompiler Pro - privacy statement
+
+What the app does NOT do
+  - It has no internet permission, so it cannot send anything over the network.
+  - It asks for no permissions at all.
+  - It has no ads, no analytics, no trackers and no third-party SDKs that collect data.
+
+Where your data lives
+  - Your code, settings and the learned order of the symbol buttons stay on this phone, in the app's private storage.
+  - Backups are only created when you choose "Back up all projects", and you choose where the file is saved.
+  - If the app crashes, a short technical log (error text, no code and no files) is saved on this phone. It is attached to a bug-report email only if you decide to send one.
+
+Things that happen only when you tap them
+  - Links (website, donate, community, review, releases, APK download) open in your browser or WhatsApp.
+  - "Report a Bug" opens your email app with a draft you can edit or cancel.
+  - "Share Code" opens Android's share sheet.
+
+Deleting your data
+  - "Clear temporary files" removes only temporary files.
+  - "Delete all app data" erases everything, after a 2-minute countdown that you can cancel.
+
+Contact: asifur2580@gmail.com

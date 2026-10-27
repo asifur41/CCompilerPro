@@ -1,11 +1,16 @@
 package com.ccompiler.pro.editor
 
-data class Hint(val name: String, val signature: String, val insert: String, val back: Int)
+/** [snippet] hints are multi-line templates; their insert text contains [CodeHints.CUR] where the cursor goes. */
+data class Hint(val name: String, val signature: String, val insert: String, val back: Int, val snippet: Boolean = false)
 
 object CodeHints {
-    private fun fn(name: String, sig: String, ins: String = "$name()", back: Int = 1) = Hint(name, sig, ins, back)
+    /** Marks where the cursor goes after a snippet is inserted. */
+    const val CUR = "@@"
 
-    private val all: List<Hint> = listOf(
+    private fun fn(name: String, sig: String, ins: String = "$name()", back: Int = 1) = Hint(name, sig, ins, back)
+    private fun snip(name: String, label: String, template: String) = Hint(name, label, template, 0, true)
+
+    private val library: List<Hint> = listOf(
         fn("printf", "int printf(const char *fmt, ...)", "printf(\"\")", 2),
         fn("scanf", "int scanf(const char *fmt, ...)", "scanf(\"\")", 2),
         fn("sprintf", "int sprintf(char *buf, const char *fmt, ...)"),
@@ -55,17 +60,51 @@ object CodeHints {
         fn("floor", "double floor(double x)"),
         fn("ceil", "double ceil(double x)"),
         fn("time", "time_t time(time_t *t)", "time(NULL)", 0),
-        Hint("include", "#include <header.h>", "#include <>", 1),
-        Hint("for", "for loop", "for (int i = 0; i < n; i++) {\n    \n}", 2),
-        Hint("while", "while loop", "while () {\n    \n}", 10),
-        Hint("if", "if statement", "if () {\n    \n}", 10),
-        Hint("switch", "switch statement", "switch () {\n    case 0:\n        break;\n    default:\n        break;\n}", 60),
         Hint("return", "return value", "return 0;", 0)
     )
 
-    fun suggest(prefix: String, max: Int = 8): List<Hint> {
+    private val snippets: List<Hint> = listOf(
+        snip("main", "main function", "int main() {\n    @@\n    return 0;\n}"),
+        snip("for", "for loop", "for (int i = 0; i < @@; i++) {\n    \n}"),
+        snip("forr", "for loop (backwards)", "for (int i = @@ - 1; i >= 0; i--) {\n    \n}"),
+        snip("while", "while loop", "while (@@) {\n    \n}"),
+        snip("do", "do-while loop", "do {\n    @@\n} while ();"),
+        snip("if", "if", "if (@@) {\n    \n}"),
+        snip("ife", "if / else", "if (@@) {\n    \n} else {\n    \n}"),
+        snip("switch", "switch", "switch (@@) {\n    case 0:\n        break;\n    default:\n        break;\n}"),
+        snip("func", "function", "void name(@@) {\n    \n}"),
+        snip("struct", "struct", "struct Name {\n    @@\n};"),
+        snip("typedef", "typedef struct", "typedef struct {\n    @@\n} Name;"),
+        snip("enum", "enum", "enum Name {\n    @@\n};"),
+        snip("pf", "printf line", "printf(\"@@\\n\");"),
+        snip("sf", "scanf a number", "scanf(\"%d\", &@@);"),
+        snip("mal", "malloc array", "int *p = (int *)malloc(@@ * sizeof(int));\nif (p == NULL) {\n    return 1;\n}"),
+        snip("fo", "open a file", "FILE *fp = fopen(\"@@\", \"r\");\nif (fp == NULL) {\n    return 1;\n}\nfclose(fp);"),
+        snip("include", "#include", "#include <@@>"),
+        snip("node", "linked-list node", "struct Node {\n    int data;\n    struct Node *next;\n};")
+    )
+
+    /** Names of the library functions, so local-name suggestions do not repeat them. */
+    val libraryNames: Set<String> get() = library.map { it.name }.toSet()
+
+    /** Order: snippets (if on), then the user's own names, then library functions. */
+    fun suggest(prefix: String, snippetsOn: Boolean = true, locals: List<LocalSymbol> = emptyList(), max: Int = 8): List<Hint> {
         if (prefix.length < 2) return emptyList()
         val p = prefix.lowercase()
-        return all.filter { it.name.startsWith(p) && it.name != prefix }.take(max)
+        val out = ArrayList<Hint>()
+        if (snippetsOn) snippets.filterTo(out) { it.name.startsWith(p) && it.name != prefix }
+        for (l in locals) {
+            if (l.name == prefix || !l.name.startsWith(prefix, ignoreCase = true)) continue
+            out.add(
+                Hint(
+                    l.name,
+                    if (l.isFunction) l.name + "()  - yours" else l.name + "  - yours",
+                    if (l.isFunction) l.name + "()" else l.name,
+                    if (l.isFunction) 1 else 0
+                )
+            )
+        }
+        library.filterTo(out) { it.name.startsWith(p) && it.name != prefix }
+        return out.distinctBy { it.name + it.snippet }.take(max)
     }
 }

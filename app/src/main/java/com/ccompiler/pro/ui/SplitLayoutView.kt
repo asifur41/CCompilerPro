@@ -1,6 +1,7 @@
 package com.ccompiler.pro.ui
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -92,6 +93,7 @@ class SplitLayoutView @JvmOverloads constructor(ctx: Context, attrs: AttributeSe
         divider.setBackgroundColor(ColorUtils.blendARGB(p.bg, p.accent, 0.25f))
         label.setTextColor(p.text)
         btnCopy.setTextColor(p.text)
+        btnCopy.compoundDrawableTintList = ColorStateList.valueOf(p.text)
         btnClear.setTextColor(p.text)
         setBackgroundColor(p.bg)
     }

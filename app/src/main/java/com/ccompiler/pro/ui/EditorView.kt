@@ -21,6 +21,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -31,6 +32,8 @@ import com.ccompiler.pro.editor.CSyntaxHighlighter
 import com.ccompiler.pro.editor.CodeFormatter
 import com.ccompiler.pro.editor.CodeHints
 import com.ccompiler.pro.editor.GestureZoomController
+import com.ccompiler.pro.editor.LocalSymbols
+import com.ccompiler.pro.editor.SymbolUsage
 import com.ccompiler.pro.editor.UndoRedoManager
 import com.ccompiler.pro.settings.FontManager
 import com.ccompiler.pro.settings.Palette
@@ -104,6 +107,10 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
     private val statusBar = LinearLayout(ctx)
     private val statusLeft = TextView(ctx)
     private val statusRight = TextView(ctx)
+    private val tabBar = TabBar(ctx)
+    private lateinit var btnUndo: ImageButton
+    private lateinit var btnRedo: ImageButton
+    private var symbolCounts = IntArray(SymbolUsage.DEFAULT.size)
 
     private val undoMgr = UndoRedoManager(edit)
     private var loading = false
@@ -115,6 +122,9 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
     private var hintPrefixLen = 0
 
     var onContentChanged: (() -> Unit)? = null
+    var onTabSelected: ((Int) -> Unit)? = null
+    var onTabClosed: ((Int) -> Unit)? = null
+    var onTabNew: (() -> Unit)? = null
 
     /** Highlight for a line the compiler complained about (cleared on the next edit). */
     private class ErrLineSpan : BackgroundColorSpan(0x44FF3B30)
@@ -136,17 +146,23 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
     init {
         orientation = VERTICAL
 
-        // ---- toolbar
+        // ---- tab strip (hidden unless "Open several files" is on)
+        tabBar.visibility = View.GONE
+        tabBar.onSelect = { onTabSelected?.invoke(it) }
+        tabBar.onClose = { onTabClosed?.invoke(it) }
+        tabBar.onNew = { onTabNew?.invoke() }
+        addView(tabBar, LayoutParams(-1, context.dp(40)))
+
+        // ---- toolbar: drawn icons (text symbols such as arrows are drawn wrongly by some phone fonts)
         toolbar.orientation = HORIZONTAL
         toolbar.gravity = Gravity.CENTER_VERTICAL
-        addToolbarButton("↶") { undo() }
-        addToolbarButton("↷") { redo() }
-        addToolbarButton("Format") { format() }
-        addToolbarButton("Find") { onFindRequested?.invoke() }
-        val spacer = View(ctx)
-        toolbar.addView(spacer, LayoutParams(0, 1, 1f))
-        addToolbarButton("⋮") { onMoreRequested?.invoke(it) }
-        addView(toolbar, LayoutParams(-1, context.dp(40)))
+        btnUndo = addIconButton(R.drawable.ic_undo, "Undo") { undo() }
+        btnRedo = addIconButton(R.drawable.ic_redo, "Redo") { redo() }
+        addIconButton(R.drawable.ic_format, "Format code") { format() }
+        addIconButton(R.drawable.ic_search, "Find and replace") { onFindRequested?.invoke() }
+        toolbar.addView(View(ctx), LayoutParams(0, 1, 1f))
+        addIconButton(R.drawable.ic_more_vert, "More") { onMoreRequested?.invoke(it) }
+        addView(toolbar, LayoutParams(-1, context.dp(44)))
 
         // ---- editor body
         edit.background = null
@@ -192,29 +208,13 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
         hintBar.visibility = View.GONE
         addView(hintBar, LayoutParams(-1, context.dp(40)))
 
-        // ---- symbol panel: two rows. Row 1 holds what C code needs most often, so it is reachable without
-        // scrolling; row 2 holds the rest. The whole panel scrolls sideways as one block.
+        // ---- symbol panel: two rows, filled by rebuildSymbols() (most used symbols first)
         symbolRow.orientation = VERTICAL
         symbolBar.addView(symbolRow)
         symbolBar.isHorizontalScrollBarEnabled = false
-        val symbolRows = listOf(
-            listOf(";", "(", ")", "{", "}", ",", "\"", "=", "%", "&", "*", "Tab"),
-            listOf("[", "]", "<", ">", "+", "-", "!", "/", "'", "#", "|")
-        )
-        for (symbols in symbolRows) {
+        for (r in 0 until 2) {
             val line = LinearLayout(context)
             line.orientation = HORIZONTAL
-            for (sym in symbols) {
-                val b = TextView(context)
-                b.text = sym
-                b.gravity = Gravity.CENTER
-                b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-                b.typeface = Typeface.MONOSPACE
-                b.minWidth = context.dp(44)
-                b.setPadding(context.dp(6), 0, context.dp(6), 0)
-                b.setOnClickListener { insert(if (sym == "Tab") "    " else sym) }
-                line.addView(b, LayoutParams(-2, context.dp(38)).apply { setMargins(context.dp(2), context.dp(2), context.dp(2), context.dp(2)) })
-            }
             symbolRow.addView(line, LayoutParams(-2, -2))
         }
         addView(symbolBar, LayoutParams(-1, -2))
@@ -261,15 +261,15 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
     var onFindRequested: (() -> Unit)? = null
     var onMoreRequested: ((View) -> Unit)? = null
 
-    private fun addToolbarButton(label: String, onClick: (View) -> Unit) {
-        val b = TextView(context)
-        b.text = label
-        b.gravity = Gravity.CENTER
-        b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-        b.setPadding(context.dp(14), 0, context.dp(14), 0)
+    private fun addIconButton(res: Int, description: String, onClick: (View) -> Unit): ImageButton {
+        val b = ImageButton(context)
+        b.setImageResource(res)
+        b.contentDescription = description
+        b.scaleType = android.widget.ImageView.ScaleType.CENTER
         b.background = context.selectableBg()
         b.setOnClickListener { onClick(it) }
-        toolbar.addView(b, LayoutParams(-2, -1))
+        toolbar.addView(b, LayoutParams(context.dp(48), -1))
+        return b
     }
 
     // ------------------------------------------------------------------ settings & theme
@@ -283,6 +283,7 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
         highlightOn = Prefs.bool(c, Prefs.HIGHLIGHT, true)
         showLines = Prefs.bool(c, Prefs.LINE_NUMBERS, true)
         symbolBar.visibility = if (Prefs.bool(c, Prefs.SYMBOL_PANEL, true)) View.VISIBLE else View.GONE
+        rebuildSymbols()
         applyWrap(Prefs.bool(c, Prefs.WORD_WRAP, false))
         scheduleRefresh()
     }
@@ -315,17 +316,11 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
         gutter.setTextColor(p.gutter)
         gutter.setBackgroundColor(ColorUtils.blendARGB(p.editorBg, p.bg, 0.5f))
         toolbar.setBackgroundColor(bar)
-        for (i in 0 until toolbar.childCount) (toolbar.getChildAt(i) as? TextView)?.setTextColor(p.text)
+        for (i in 0 until toolbar.childCount) (toolbar.getChildAt(i) as? ImageButton)?.setColorFilter(p.text)
+        tabBar.applyTheme(p)
         hintBar.setBackgroundColor(bar)
         symbolBar.setBackgroundColor(bar)
-        for (r in 0 until symbolRow.childCount) {
-            val line = symbolRow.getChildAt(r) as LinearLayout
-            for (i in 0 until line.childCount) {
-                val b = line.getChildAt(i) as TextView
-                b.setTextColor(p.text)
-                b.background = roundedBg(ColorUtils.setAlphaComponent(p.accent, 50), context.dp(6).toFloat())
-            }
-        }
+        styleSymbols()
         statusBar.setBackgroundColor(bar)
         statusLeft.setTextColor(p.gutter)
         statusRight.setTextColor(p.accent)
@@ -532,6 +527,7 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
         updateGutter()
         updateHints()
         updateCursorStatus()
+        updateUndoButtons()
     }
 
     private fun updateGutter() {
@@ -578,7 +574,8 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
         var st = sel
         while (st > 0 && (t[st - 1].isLetterOrDigit() || t[st - 1] == '_')) st--
         val prefix = t.substring(st, sel)
-        val hints = CodeHints.suggest(prefix)
+        val locals = if (prefix.length >= 2) LocalSymbols.extract(t.toString(), CodeHints.libraryNames) else emptyList()
+        val hints = CodeHints.suggest(prefix, Prefs.bool(context, Prefs.SNIPPETS, true), locals)
         hintPrefixLen = prefix.length
         if (hints.isEmpty()) { currentHints = emptyList(); hintBar.visibility = View.GONE; return }
         if (hints != currentHints) {
@@ -592,7 +589,7 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
                 chip.setTextColor(palette.text)
                 chip.gravity = Gravity.CENTER
                 chip.setPadding(context.dp(12), 0, context.dp(12), 0)
-                chip.background = roundedBg(ColorUtils.setAlphaComponent(palette.accent, 70), context.dp(14).toFloat())
+                chip.background = roundedBg(ColorUtils.setAlphaComponent(palette.accent, if (h.snippet) 130 else 70), context.dp(14).toFloat())
                 chip.setOnClickListener { applyHint(h) }
                 hintRow.addView(chip, LayoutParams(-2, context.dp(30)).apply { setMargins(context.dp(4), context.dp(5), context.dp(4), context.dp(5)) })
             }
@@ -604,8 +601,91 @@ class EditorView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = 
         val e = edit.text ?: return
         val sel = edit.selectionStart.coerceAtLeast(0)
         val start = (sel - hintPrefixLen).coerceAtLeast(0)
-        e.replace(start, sel, h.insert)
-        edit.setSelection((start + h.insert.length - h.back).coerceIn(0, e.length))
+        val cursor: Int
+        val text: String
+        if (h.insert.contains(CodeHints.CUR)) {
+            // a snippet: every new line keeps the indentation of the current line; the cursor goes where @@ was
+            val before = e.toString()
+            val lineStart = before.lastIndexOf('\n', start - 1) + 1
+            val indent = before.substring(lineStart, start).takeWhile { it == ' ' || it == '\t' }
+            val withIndent = h.insert.replace("\n", "\n" + indent)
+            val at = withIndent.indexOf(CodeHints.CUR)
+            text = withIndent.replace(CodeHints.CUR, "")
+            cursor = start + at
+        } else {
+            text = h.insert
+            cursor = start + text.length - h.back
+        }
+        e.replace(start, sel, text)
+        edit.setSelection(cursor.coerceIn(0, e.length))
         hintBar.visibility = View.GONE
+    }
+
+    // ------------------------------------------------------------------ symbol panel (learns what you use)
+
+    private fun rebuildSymbols() {
+        val smart = Prefs.bool(context, Prefs.SMART_SYMBOLS, true)
+        symbolCounts = SymbolUsage.parse(Prefs.str(context, Prefs.SYMBOL_COUNTS, ""))
+        val order = if (smart) SymbolUsage.order(symbolCounts) else SymbolUsage.DEFAULT
+        for (r in 0 until symbolRow.childCount) (symbolRow.getChildAt(r) as LinearLayout).removeAllViews()
+        order.forEachIndexed { i, sym ->
+            val line = symbolRow.getChildAt(if (i < SymbolUsage.ROW1) 0 else 1) as LinearLayout
+            val b = TextView(context)
+            b.text = sym
+            b.gravity = Gravity.CENTER
+            b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            b.typeface = Typeface.MONOSPACE
+            b.minWidth = context.dp(44)
+            b.setPadding(context.dp(6), 0, context.dp(6), 0)
+            b.setOnClickListener {
+                insert(if (sym == "Tab") "    " else sym)
+                symbolCounts = SymbolUsage.bump(symbolCounts, sym)
+                Prefs.put(context, Prefs.SYMBOL_COUNTS, SymbolUsage.serialize(symbolCounts))
+            }
+            line.addView(b, LayoutParams(-2, context.dp(38)).apply { setMargins(context.dp(2), context.dp(2), context.dp(2), context.dp(2)) })
+        }
+        styleSymbols()
+    }
+
+    private fun styleSymbols() {
+        for (r in 0 until symbolRow.childCount) {
+            val line = symbolRow.getChildAt(r) as LinearLayout
+            for (i in 0 until line.childCount) {
+                val b = line.getChildAt(i) as TextView
+                b.setTextColor(palette.text)
+                b.background = roundedBg(ColorUtils.setAlphaComponent(palette.accent, 50), context.dp(6).toFloat())
+            }
+        }
+    }
+
+    private fun updateUndoButtons() {
+        btnUndo.alpha = if (undoMgr.canUndo()) 1f else 0.35f
+        btnRedo.alpha = if (undoMgr.canRedo()) 1f else 0.35f
+    }
+
+    // ------------------------------------------------------------------ tabs support
+
+    fun exportHistory(): UndoRedoManager.State = undoMgr.export()
+
+    fun selectionStart(): Int = edit.selectionStart.coerceAtLeast(0)
+
+    /** Shows another document: its text, cursor and its own undo history. */
+    fun restoreDocument(text: String, selection: Int, history: UndoRedoManager.State?) {
+        clearErrorLines()
+        loading = true
+        edit.setText(text)
+        undoMgr.restore(text, history)
+        loading = false
+        edit.setSelection(selection.coerceIn(0, text.length))
+        scheduleRefresh()
+    }
+
+    fun showTabs(titles: List<String>, active: Int) {
+        tabBar.visibility = View.VISIBLE
+        tabBar.update(titles, active)
+    }
+
+    fun hideTabs() {
+        tabBar.visibility = View.GONE
     }
 }

@@ -47,7 +47,7 @@ class OnboardingActivity : AppCompatActivity() {
         skip.setTextColor(p.text)
         val tint = ColorStateList.valueOf(p.accent)
         val fg = if (ColorUtils.calculateLuminance(p.accent) > 0.5) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
-        for (b in listOf(next, start)) { b.backgroundTintList = tint; b.setTextColor(fg) }
+        for (b in listOf(next, start)) { b.backgroundTintList = tint; b.setTextColor(fg); b.iconTint = ColorStateList.valueOf(fg) }
 
         pager.adapter = object : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {

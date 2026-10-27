@@ -19,6 +19,13 @@ object Prefs {
     const val AUTOSAVE_INDICATOR = "autosave_indicator"
     const val ONBOARDED = "onboarded"
     const val CURRENT_FILE = "current_file"
+    const val SNIPPETS = "snippets"                  // default on
+    const val TABS = "tabs"                          // default off
+    const val SMART_SYMBOLS = "smart_symbols"        // default on
+    const val MONOKAI = "monokai"                    // default off
+    const val SYMBOL_COUNTS = "symbol_counts"
+    const val SETTINGS_OPEN = "settings_open"
+    const val OPEN_TABS = "open_tabs"
 
     private fun sp(c: Context) = c.applicationContext.getSharedPreferences("ccompiler_pro", Context.MODE_PRIVATE)
 

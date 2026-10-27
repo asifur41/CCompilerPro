@@ -1,0 +1,34 @@
+# Third-party licenses
+
+```
+CCompiler Pro is free software under the MIT License.
+Copyright (c) Md Asifur Rahman.
+
+It includes or uses the following third-party software.
+
+TinyCC (tcc), the C compiler
+  Copyright (c) Fabrice Bellard and the TinyCC contributors.
+  License: GNU Lesser General Public License 2.1 (LGPL-2.1).
+  TinyCC is built from its source code during every release and runs as a separate program (libtccexe.so). It is not linked into this app's own code.
+  Source code: https://repo.or.cz/tinycc.git
+  The exact version used is recorded in each release's TRUST_REPORT.md on GitHub.
+  License text: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+
+AndroidX, Material Components for Android, Kotlin coroutines
+  Copyright (c) Google LLC and JetBrains s.r.o.
+  License: Apache License 2.0
+  https://www.apache.org/licenses/LICENSE-2.0
+
+Fonts (bundled in the app)
+  Roboto Mono: Apache License 2.0
+  Fira Code: SIL Open Font License 1.1 (The Fira Code Project Authors)
+  JetBrains Mono: SIL Open Font License 1.1 (JetBrains s.r.o.)
+  Courier Prime: SIL Open Font License 1.1 (Quote-Unquote Apps)
+  https://openfontlicense.org
+
+Monokai theme colours
+  Based on the classic Monokai colour scheme by Wimer Hazenberg.
+  This is not the paid "Monokai Pro" theme.
+
+This list is a summary. The full license texts are available at the links above.
+```

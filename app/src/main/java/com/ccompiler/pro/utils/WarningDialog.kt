@@ -24,19 +24,19 @@ object WarningDialog {
     }
 
     fun clearEditor(ctx: Context, onConfirm: () -> Unit) =
-        show(ctx, "⚠ Clear Editor", "This will erase all code. Continue?", "OK", onConfirm)
+        show(ctx, "Clear Editor", "This will erase all code. Continue?", "OK", onConfirm)
 
     fun discardChanges(ctx: Context, onConfirm: () -> Unit) =
-        show(ctx, "⚠ Discard Changes", "Unsaved changes will be lost. Continue?", "Discard", onConfirm)
+        show(ctx, "Discard Changes", "Unsaved changes will be lost. Continue?", "Discard", onConfirm)
 
     fun deleteFile(ctx: Context, name: String, onConfirm: () -> Unit) =
-        show(ctx, "⚠ Delete", "Delete '$name'? Cannot be undone.", "Delete", onConfirm)
+        show(ctx, "Delete", "Delete '$name'? Cannot be undone.", "Delete", onConfirm)
 
     fun overwriteFile(ctx: Context, name: String, onConfirm: () -> Unit) =
-        show(ctx, "⚠ Overwrite", "'$name' exists. Overwrite?", "Overwrite", onConfirm)
+        show(ctx, "Overwrite", "'$name' exists. Overwrite?", "Overwrite", onConfirm)
 
     fun exitWithoutSave(ctx: Context, onConfirm: () -> Unit) =
-        show(ctx, "⚠ Exit", "Unsaved changes. Exit anyway?", "Exit", onConfirm)
+        show(ctx, "Exit", "Unsaved changes. Exit anyway?", "Exit", onConfirm)
 
     fun rename(ctx: Context, from: String, to: String, onConfirm: () -> Unit) =
         show(ctx, "Rename", "Rename '$from' to '$to'?", "Rename", onConfirm)

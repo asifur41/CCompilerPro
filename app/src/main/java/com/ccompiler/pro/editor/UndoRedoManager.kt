@@ -30,6 +30,19 @@ class UndoRedoManager(private val edit: EditText, private val maxLevels: Int = 1
         redoStack.clear()
     }
 
+    /** A copy of the history, so a tab can keep its own undo/redo while another tab is shown. */
+    class State(val undo: List<String>, val redo: List<String>)
+
+    fun export(): State = State(undoStack.toList(), redoStack.toList())
+
+    fun restore(text: String, state: State?) {
+        undoStack.clear()
+        redoStack.clear()
+        if (state != null) { undoStack.addAll(state.undo); redoStack.addAll(state.redo) }
+        current = text
+        lastChange = 0L
+    }
+
     fun canUndo() = undoStack.isNotEmpty()
     fun canRedo() = redoStack.isNotEmpty()
 
