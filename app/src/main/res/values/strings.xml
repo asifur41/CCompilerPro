@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">CCompiler Pro</string>
+    <string name="app_name_short">C Compiler</string>
     <string name="menu_new">New File</string>
     <string name="menu_open">Open File</string>
     <string name="menu_samples">Sample Programs</string>
