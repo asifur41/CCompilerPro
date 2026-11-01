@@ -27,6 +27,7 @@
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize"
             android:exported="true"
+            android:label="@string/app_name_short"
             android:theme="@style/Theme.CCompiler.Splash"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
