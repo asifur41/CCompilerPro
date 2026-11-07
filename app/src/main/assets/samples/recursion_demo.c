@@ -1,3 +1,7 @@
+/*
+ * Title: Recursion: GCD, Power, Hanoi
+ * Three classic recursive problems: greatest common divisor, power, and Towers of Hanoi.
+ */
 #include <stdio.h>
 
 int gcd(int a, int b) {

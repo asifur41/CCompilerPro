@@ -1,3 +1,7 @@
+/*
+ * Title: Sorting with qsort()
+ * Sorts an array of integers using the C standard library's qsort().
+ */
 #include <stdio.h>
 #include <stdlib.h>
 

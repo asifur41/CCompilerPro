@@ -1,3 +1,7 @@
+/*
+ * Title: Factorial (Loop)
+ * Computes n! with a simple for loop instead of recursion.
+ */
 #include <stdio.h>
 
 unsigned long long factorial(int n) {

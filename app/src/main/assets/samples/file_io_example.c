@@ -1,3 +1,7 @@
+/*
+ * Title: File Writing and Reading
+ * Writes text to a file and reads it back, in the app's private folder.
+ */
 #include <stdio.h>
 #include <stdlib.h>
 

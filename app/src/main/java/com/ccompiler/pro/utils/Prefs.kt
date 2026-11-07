@@ -26,6 +26,8 @@ object Prefs {
     const val SYMBOL_COUNTS = "symbol_counts"
     const val SETTINGS_OPEN = "settings_open"
     const val OPEN_TABS = "open_tabs"
+    const val ARGS_ENABLED = "program_args_enabled"   // default off
+    const val PROGRAM_ARGS = "program_args"           // the text typed in the args box
 
     private fun sp(c: Context) = c.applicationContext.getSharedPreferences("ccompiler_pro", Context.MODE_PRIVATE)
 

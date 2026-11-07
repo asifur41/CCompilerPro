@@ -1,3 +1,7 @@
+/*
+ * Title: Linked List
+ * Builds and prints a simple singly linked list.
+ */
 #include <stdio.h>
 #include <stdlib.h>
 

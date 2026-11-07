@@ -1,3 +1,7 @@
+/*
+ * Title: Structures: Student Records
+ * Stores and prints a list of students using a struct.
+ */
 #include <stdio.h>
 #include <string.h>
 

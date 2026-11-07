@@ -47,4 +47,27 @@ object ImportExportHandler {
 
     fun readSample(ctx: Context, name: String): String =
         ctx.assets.open("samples/$name").bufferedReader().use { it.readText() }
+
+    /**
+     * Samples with a title and a short explanation, in display order: the order listed in
+     * assets/samples/index.txt first, then any other .c files found alphabetically. Falls back
+     * to plain alphabetical order if index.txt is missing.
+     */
+    fun sampleList(ctx: Context): List<SampleMeta.Sample> {
+        val all = listSamples(ctx)
+        val indexOrder = try {
+            ctx.assets.open("samples/index.txt").bufferedReader().use { it.readText() }
+                .lines().map { it.trim() }.filter { it.isNotEmpty() }
+        } catch (e: Exception) {
+            emptyList()
+        }
+        val ordered = LinkedHashSet<String>()
+        for (n in indexOrder) if (all.contains(n)) ordered.add(n)
+        for (n in all) ordered.add(n)
+        return ordered.map { name ->
+            val text = readSample(ctx, name)
+            val (title, summary) = SampleMeta.parse(text, name)
+            SampleMeta.Sample(name, title, summary)
+        }
+    }
 }

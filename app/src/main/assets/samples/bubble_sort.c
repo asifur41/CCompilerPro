@@ -1,3 +1,7 @@
+/*
+ * Title: Bubble Sort
+ * Sorts an array by repeatedly swapping neighbouring out-of-order elements.
+ */
 #include <stdio.h>
 #include <stdbool.h>
 

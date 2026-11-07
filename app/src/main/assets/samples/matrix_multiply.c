@@ -1,3 +1,7 @@
+/*
+ * Title: Matrix Multiplication
+ * Multiplies two 3x3 matrices with nested loops.
+ */
 #include <stdio.h>
 
 #define N 3

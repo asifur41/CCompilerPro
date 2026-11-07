@@ -1,3 +1,7 @@
+/*
+ * Title: Pointers: Swap and Arithmetic
+ * Shows swapping two values through pointers and basic pointer arithmetic.
+ */
 #include <stdio.h>
 
 void swap(int *a, int *b) {

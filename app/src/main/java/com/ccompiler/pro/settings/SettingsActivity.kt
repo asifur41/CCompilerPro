@@ -82,7 +82,8 @@ class SettingsActivity : AppCompatActivity() {
                 SettingItem.Toggle(Prefs.LINE_NUMBERS, "Line numbers", true),
                 SettingItem.Toggle(Prefs.WORD_WRAP, "Word wrap", false),
                 SettingItem.Toggle(Prefs.AUTO_FORMAT, "Auto-format on Run", false),
-                SettingItem.Toggle(Prefs.TABS, "Open several files (tabs)", false, "Shows tabs so you can switch between files. Off by default.")
+                SettingItem.Toggle(Prefs.TABS, "Open several files (tabs)", false, "Shows tabs so you can switch between files. Off by default."),
+                SettingItem.Toggle(Prefs.ARGS_ENABLED, "Program arguments", false, "Adds a box next to Run for values passed to main(argc, argv). Off by default.")
             )),
             SettingItem.Group("typing", "Typing helpers", listOf(
                 SettingItem.Toggle(Prefs.SNIPPETS, "Code snippets", true, "Type for, while, if, main... and tap to insert a ready template."),

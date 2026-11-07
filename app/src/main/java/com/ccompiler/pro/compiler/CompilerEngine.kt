@@ -92,19 +92,14 @@ class CompilerEngine(private val ctx: Context) {
      * user's file, renames its main(), and calls it after switching stdout to unbuffered mode.
      * Without that, `printf("Enter a number: ")` would sit in a buffer while the program waits for input.
      * Errors inside the user's file keep their own file name and line numbers.
+     *
+     * [programName] becomes argv[0] (the file name shown in the app) and [args] become argv[1], argv[2], ...
+     * They are written straight into the wrapper as C string literals (see ArgsTools) - not passed through
+     * tcc's own command line, a shell, or stdin - so spaces, quotes and non-English letters arrive unchanged.
      */
-    fun runCommand(source: File): List<String> {
+    fun runCommand(source: File, programName: String = source.name, args: List<String> = emptyList()): List<String> {
         val wrapper = File(source.parentFile, "prog_run.c")
-        wrapper.writeText(
-            "#define main __ccp_user_main\n" +
-                "#include \"${source.name}\"\n" +
-                "#undef main\n" +
-                "#include <stdio.h>\n" +
-                "int main(int argc, char **argv) {\n" +
-                "    setvbuf(stdout, 0, _IONBF, 0);\n" +
-                "    return ((int (*)(int, char **))__ccp_user_main)(argc, argv);\n" +
-                "}\n"
-        )
+        wrapper.writeText(ArgsTools.buildRunWrapper(source.name, programName, args))
         return (Toolchain.baseArgs(ctx) ?: emptyList()) + listOf("-run", wrapper.name)
     }
 

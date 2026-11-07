@@ -1,3 +1,7 @@
+/*
+ * Title: Reverse a String
+ * Reverses a string in place by swapping characters from both ends.
+ */
 #include <stdio.h>
 #include <string.h>
 

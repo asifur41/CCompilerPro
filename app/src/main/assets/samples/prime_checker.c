@@ -1,3 +1,7 @@
+/*
+ * Title: Prime Number Checker
+ * Tests a range of numbers and prints which ones are prime.
+ */
 #include <stdio.h>
 #include <stdbool.h>
 

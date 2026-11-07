@@ -18,9 +18,9 @@ An offline C editor and compiler for Android. Write C, tap **Run**, see the outp
 * Editor: syntax highlighting, auto-indent, code formatting, hints, symbol bar, line numbers, undo/redo (100 levels), pinch-zoom, find/replace (plain or regex), go to line.
 * **Run:** the code is type-checked first (errors are underlined; tap an error to jump to its line, with a plain-English hint), then executed in a separate process.
 * **Interactive input:** programs that use `scanf` can be answered while they run; an input row (with **Send** and **EOF**) appears only while the program waits.
-* Split view (draggable divider) or Flip view (swipe between editor and output), 5 themes, 4 fonts, auto-save, 15 sample programs, file manager with folders, import/export, share as text or image, intro tour.
+* Split view (draggable divider) or Flip view (swipe between editor and output), 5 themes, 4 fonts, auto-save, 30 sample programs, file manager with folders, import/export, share as text or image, intro tour.
 * Settings are grouped into drop-down sections (the two most used options of each group are always visible): Look & Feel, Editor, Typing helpers, Auto-save, Storage & Backup, About & Legal.
-* Optional: tabs for several open files (off by default), a Monokai colour theme (classic Monokai colours, offline), code snippets (on by default), your own names in autocomplete, and symbol buttons that learn which symbols you use most.
+* Optional: tabs for several open files (off by default), **program arguments** (off by default – a small box next to Run that passes values to `main(argc, argv)`, for example `12.5 * 4`), a Monokai colour theme (classic Monokai colours, offline), code snippets (on by default), your own names in autocomplete, and symbol buttons that learn which symbols you use most.
 * Storage & Backup: back up all projects into one ZIP and restore them later (restore is safe against malicious ZIP files), clear temporary files, or delete all app data (with a 2-minute cancellable countdown).
 * Run limits: 30 s of run time (time spent waiting for input does not count), 256 MB memory (best effort), output size cap. Basic source checks block `system()`, `exec*`, `fork`, sockets and `/proc`, `/sys`, `/dev` – a convenience, not a security boundary; Android's app sandbox is the real isolation.
 

@@ -9,6 +9,10 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.DocumentsContract
+import android.text.Editable
+import android.text.TextWatcher
+import android.widget.ArrayAdapter
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
@@ -17,6 +21,7 @@ import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.TooltipCompat
 import androidx.core.graphics.ColorUtils
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import android.text.SpannableString
@@ -27,6 +32,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import com.ccompiler.pro.editor.UndoRedoManager
 import androidx.core.view.WindowInsetsControllerCompat
+import com.ccompiler.pro.compiler.ArgsTools
 import com.ccompiler.pro.compiler.CodeSanitizer
 import com.ccompiler.pro.compiler.CompilationResult
 import com.ccompiler.pro.compiler.ExecResult
@@ -39,6 +45,7 @@ import com.ccompiler.pro.files.StorageHelper
 import com.ccompiler.pro.menu.EditorMenu
 import com.ccompiler.pro.settings.FontManager
 import com.ccompiler.pro.settings.LayoutModeManager
+import com.ccompiler.pro.settings.Palette
 import com.ccompiler.pro.settings.SettingsActivity
 import com.ccompiler.pro.settings.ThemeManager
 import com.ccompiler.pro.ui.EditorView
@@ -53,6 +60,7 @@ import com.ccompiler.pro.utils.ShareHelper
 import com.ccompiler.pro.utils.WarningDialog
 import com.ccompiler.pro.utils.dp
 import com.ccompiler.pro.utils.hideKeyboard
+import com.ccompiler.pro.utils.roundedBg
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import android.view.View
@@ -76,6 +84,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvTitle: TextView
     private lateinit var btnRun: MaterialButton
     private lateinit var btnStop: MaterialButton
+    private lateinit var argsBar: LinearLayout
+    private lateinit var argsHelp: ImageButton
+    private lateinit var argsInput: EditText
     private lateinit var host: FrameLayout
     private lateinit var editor: EditorView
     private lateinit var output: OutputView
@@ -132,7 +143,21 @@ class MainActivity : AppCompatActivity() {
         btnMenu = findViewById(R.id.btn_menu)
         tvTitle = findViewById(R.id.tv_title)
         btnRun = findViewById(R.id.btn_run)
+        argsBar = findViewById(R.id.args_bar)
+        argsHelp = findViewById(R.id.args_help)
+        argsInput = findViewById(R.id.args_input)
         host = findViewById(R.id.pane_host)
+
+        argsInput.setText(Prefs.str(this, Prefs.PROGRAM_ARGS, ""))
+        argsInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                Prefs.put(this@MainActivity, Prefs.PROGRAM_ARGS, s?.toString() ?: "")
+            }
+        })
+        TooltipCompat.setTooltipText(argsHelp, "What are program arguments?")
+        argsHelp.setOnClickListener { showArgsHelp() }
 
         compiler = CompilerEngine(this)
         editor = EditorView(this)
@@ -255,6 +280,7 @@ class MainActivity : AppCompatActivity() {
         output.applyTheme(p)
         applyLayoutMode()
         pane?.applyTheme(p)
+        applyArgsBar(p)
         updateRunButton()
         scheduleAutosave()
         collapseTabsIfOff()
@@ -272,6 +298,31 @@ class MainActivity : AppCompatActivity() {
         host.addView(p.view, FrameLayout.LayoutParams(-1, -1))
         p.attach(editor, output)
         p.applyTheme(ThemeManager.palette(this))
+    }
+
+    /** Shows or hides the optional "Program arguments" bar (Settings > Editor) and colors it to match the theme. */
+    private fun applyArgsBar(p: Palette) {
+        val on = Prefs.bool(this, Prefs.ARGS_ENABLED, false)
+        argsBar.visibility = if (on) View.VISIBLE else View.GONE
+        if (!on) return
+        argsBar.setBackgroundColor(p.editorBg)
+        argsHelp.setColorFilter(p.text)
+        argsInput.setTextColor(p.text)
+        argsInput.setHintTextColor(ColorUtils.setAlphaComponent(p.text, 140))
+        argsInput.background = roundedBg(p.bg, dp(8).toFloat(), p.gutter, dp(1))
+    }
+
+    private fun showArgsHelp() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Program arguments")
+            .setMessage(
+                "Optional values passed to main() through argc and argv. " +
+                    "Separate multiple values with spaces. Use quotes for values containing spaces.\n\n" +
+                    "Example: 12.5 * 4  ->  argv[1]=\"12.5\", argv[2]=\"*\", argv[3]=\"4\"\n\n" +
+                    "Turn this box on or off in Settings > Editor > Program arguments."
+            )
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     private fun checkKeyboard() {
@@ -754,18 +805,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun samplesDialog() {
-        val names = ImportExportHandler.listSamples(this)
+        val samples = ImportExportHandler.sampleList(this)
+        val adapter = object : ArrayAdapter<String>(
+            this, android.R.layout.simple_list_item_2, android.R.id.text1,
+            samples.mapIndexed { i, s -> "${i + 1}. ${s.title}" }
+        ) {
+            override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
+                val v = super.getView(position, convertView, parent)
+                v.findViewById<TextView>(android.R.id.text2).text = samples[position].summary
+                return v
+            }
+        }
         MaterialAlertDialogBuilder(this)
-            .setTitle("Sample Programs")
-            .setItems(names.toTypedArray()) { _, which ->
+            .setTitle("Sample Programs (${samples.size})")
+            .setAdapter(adapter) { _, which ->
                 replaceGuard {
-                    val t = ImportExportHandler.readSample(this, names[which])
+                    val name = samples[which].file
+                    val t = ImportExportHandler.readSample(this, name)
                     if (tabsOn()) {
-                        openInNewTab(null, names[which], t)
+                        openInNewTab(null, name, t)
                     } else {
                         editor.setText(t)
                         savedText = t
-                        untitledName = names[which]
+                        untitledName = name
                         setCurrent(null)
                         StorageHelper.draftFile(this).delete()
                         output.clear()
@@ -889,6 +951,26 @@ class MainActivity : AppCompatActivity() {
                 finishRun(gen)
                 return@launch
             }
+
+            // 2b) optional "Program arguments" (Settings > Editor), off by default
+            val argsEnabled = Prefs.bool(this@MainActivity, Prefs.ARGS_ENABLED, false)
+            val parsedArgs = if (argsEnabled) {
+                ArgsTools.parse(Prefs.str(this@MainActivity, Prefs.PROGRAM_ARGS, ""))
+            } else {
+                ArgsTools.Parsed(emptyList())
+            }
+            if (parsedArgs.error != null) {
+                output.append("Program arguments: ${parsedArgs.error}\n", OutputView.Kind.ERR)
+                finishRun(gen)
+                return@launch
+            }
+            if (!argsEnabled && Regex("\\bmain\\s*\\(\\s*int\\s+\\w+\\s*,").containsMatchIn(code)) {
+                output.append(
+                    "Note: this program reads command-line arguments. To give it some, turn on Settings > Editor > Program arguments.\n",
+                    OutputView.Kind.INFO
+                )
+            }
+
             if (!compiler.isAvailable()) {
                 output.append(compiler.missingMessage(), OutputView.Kind.ERR)
                 finishRun(gen)
@@ -927,8 +1009,10 @@ class MainActivity : AppCompatActivity() {
             }
 
             // 4) run (background coroutines inside ExecutorEngine; callbacks come back on the main thread)
-            output.append("Running…\n\n", OutputView.Kind.INFO)
-            val cmd = withContext(Dispatchers.IO) { compiler.runCommand(src) }
+            val runMsg = if (parsedArgs.args.isNotEmpty())
+                "Running with ${parsedArgs.args.size} argument(s)…\n\n" else "Running…\n\n"
+            output.append(runMsg, OutputView.Kind.INFO)
+            val cmd = withContext(Dispatchers.IO) { compiler.runCommand(src, name, parsedArgs.args) }
             if (gen != runGeneration) return@launch
             executor.start(cmd, dir, listenerFor(gen)) { gen == runGeneration }
         }

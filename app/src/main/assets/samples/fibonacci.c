@@ -1,3 +1,7 @@
+/*
+ * Title: Fibonacci Series
+ * Prints the Fibonacci sequence using both a recursive and an iterative function.
+ */
 #include <stdio.h>
 
 /* Recursive version (slow for large n, fine for demonstration) */

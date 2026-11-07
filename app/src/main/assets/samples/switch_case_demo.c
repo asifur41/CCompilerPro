@@ -1,3 +1,7 @@
+/*
+ * Title: Switch Statement
+ * Uses a switch statement to print the name of a day from its number.
+ */
 #include <stdio.h>
 
 const char *day_name(int d) {

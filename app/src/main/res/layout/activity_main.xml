@@ -46,6 +46,40 @@
             app:iconGravity="textStart" />
     </LinearLayout>
 
+    <LinearLayout
+        android:id="@+id/args_bar"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="4dp"
+        android:paddingEnd="8dp"
+        android:visibility="gone">
+
+        <ImageButton
+            android:id="@+id/args_help"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="What are program arguments?"
+            android:src="@drawable/ic_help" />
+
+        <EditText
+            android:id="@+id/args_input"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:background="@null"
+            android:hint="Optional arguments, e.g. 12.5 * 4"
+            android:imeOptions="actionDone|flagNoExtractUi"
+            android:importantForAutofill="no"
+            android:inputType="text|textNoSuggestions"
+            android:maxLines="1"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp" />
+    </LinearLayout>
+
     <FrameLayout
         android:id="@+id/pane_host"
         android:layout_width="match_parent"
