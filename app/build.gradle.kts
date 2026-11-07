@@ -11,8 +11,8 @@ android {
         applicationId = "com.ccompiler.pro"
         minSdk = 26
         targetSdk = 34
-        versionCode = 20700
-        versionName = "2.7.0"
+        versionCode = 20705
+        versionName = "2.7.5"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
